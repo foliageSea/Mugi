@@ -87,7 +87,7 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 ## 桌面版
 
-Windows 和 macOS 桌面版可从 [GitHub Releases](https://github.com/foliageSea/Mugi/releases) 下载。两者均使用 Wails 3，内嵌前端和 scrcpy-server，无需另开浏览器或启动 Web 服务。桌面版建议使用系统 ADB；需要 WebUSB 时，请使用 Chrome / Edge 打开 Web 版。
+[GitHub Releases](https://github.com/foliageSea/Mugi/releases) 提供 Windows x64（`amd64`）和 macOS Apple Silicon（`arm64`）桌面版；Windows ARM64 和 Intel Mac 可从源码自行构建。两者均使用 Wails 3，内嵌前端和 scrcpy-server，无需另开浏览器或启动 Web 服务。桌面版建议使用系统 ADB；需要 WebUSB 时，请使用 Chrome / Edge 打开 Web 版。
 
 ### Windows
 
@@ -115,7 +115,7 @@ npm run build:macos
 npm run build:macos -- --arch arm64 --dmg
 ```
 
-默认按当前架构生成 `bin/mugi-macos-<架构>/mugi.app` 和 `bin/mugi-macos-<架构>.zip`。可追加 `--platform-tools <目录>`，把包含 macOS 版 `adb` 的目录放入应用包。Release 提供按架构区分的 ZIP 和 DMG，未做 Apple 公证；打开自己构建或从 Release 下载的应用时，若被 Gatekeeper 拦截，可在「系统设置 → 隐私与安全性」中允许打开。
+默认按当前架构生成 `bin/mugi-macos-<架构>/mugi.app` 和 `bin/mugi-macos-<架构>.zip`。可追加 `--platform-tools <目录>`，把包含 macOS 版 `adb` 的目录放入应用包。Release 提供 Apple Silicon 版 ZIP 和 DMG，未做 Apple 公证；打开自己构建或从 Release 下载的应用时，若被 Gatekeeper 拦截，可在「系统设置 → 隐私与安全性」中允许打开。
 
 ### 配置 ADB 路径
 
@@ -240,7 +240,7 @@ git push origin HEAD
 
 `--prepare` 同步应用版本以及 npm 锁文件与 Windows 清单中的版本，不提交、不推送；macOS 构建读取应用版本的数字部分。`@mugi/web-adb` SDK 独立维护版本。发版脚本默认生成发行说明，可用 `--notes` 或 `--notes-file` 覆盖；`v0.2.0-rc.1` 形式会发布为预发行版。发版需使用有仓库写权限的 GitHub 凭据；Actions 自动生成的 `GITHUB_TOKEN` 不会触发后续 Release 工作流。
 
-[发布工作流](.github/workflows/release.yml) 在发布 Release 后检出对应标签，将带版本号的 Windows、macOS、Linux Web 服务和 WebUSB 静态站点构建产物及 SHA-256 校验文件上传到同一 Release，并把同名版本标签的多架构镜像推到 `ghcr.io/foliagesea/mugi`。仅推 Git 标签不会触发。仓库需关闭 Release 不可变设置，否则工作流无法向已发布的 Release 追加附件。首次发布后如需匿名拉取，请在 GitHub Packages 的包设置中将镜像设为公开。
+[发布工作流](.github/workflows/release.yml) 在发布 Release 后检出对应标签，将带版本号的 Windows `amd64`、macOS `arm64`、Linux 双架构 Web 服务和 WebUSB 静态站点构建产物及 SHA-256 校验文件上传到同一 Release，并把同名版本标签的多架构镜像推到 `ghcr.io/foliagesea/mugi`。仅推 Git 标签不会触发。仓库需关闭 Release 不可变设置，否则工作流无法向已发布的 Release 追加附件。首次发布后如需匿名拉取，请在 GitHub Packages 的包设置中将镜像设为公开。
 
 ## 许可证
 

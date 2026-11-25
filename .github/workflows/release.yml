@@ -103,12 +103,6 @@ jobs:
           - platform: windows
             arch: amd64
             runner: ubuntu-24.04
-          - platform: windows
-            arch: arm64
-            runner: ubuntu-24.04
-          - platform: macos
-            arch: amd64
-            runner: macos-15-intel
           - platform: macos
             arch: arm64
             runner: macos-15
@@ -245,9 +239,6 @@ jobs:
         run: |
           files=(
             "mugi-$RELEASE_TAG-windows-amd64.zip"
-            "mugi-$RELEASE_TAG-windows-arm64.zip"
-            "mugi-$RELEASE_TAG-macos-amd64.zip"
-            "mugi-$RELEASE_TAG-macos-amd64.dmg"
             "mugi-$RELEASE_TAG-macos-arm64.zip"
             "mugi-$RELEASE_TAG-macos-arm64.dmg"
             "mugi-$RELEASE_TAG-linux-amd64.tar.gz"
