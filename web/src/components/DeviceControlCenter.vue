@@ -1085,7 +1085,7 @@ async function focusTitle(event: Event) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
-  padding: 0 7px 7px;
+  padding: 8px 7px 7px;
 }
 .control-center-more-content .control-center-command {
   min-height: 29px;

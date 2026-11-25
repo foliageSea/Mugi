@@ -643,7 +643,8 @@ test('the narrow control center keeps controls reachable and confirms reboot', a
   const slider = panel.getByRole('slider', { name: '屏幕亮度', exact: true })
   const home = panel.getByRole('button', { name: '主屏幕', exact: true })
   await expect(panel.getByRole('button', { name: '重启设备', exact: true })).toBeHidden()
-  await panel.getByRole('button', { name: '更多控制', exact: true }).click()
+  const moreTrigger = panel.getByRole('button', { name: '更多控制', exact: true })
+  await moreTrigger.click()
   const moreContent = panel.locator('.control-center-more-content')
   const commands = moreContent.getByRole('button')
   await expect(commands).toHaveText([
@@ -659,6 +660,8 @@ test('the narrow control center keeps controls reachable and confirms reboot', a
   const rows = await commands.evaluateAll((buttons) =>
     buttons.map((button) => button.getBoundingClientRect().top),
   )
+  const trigger = (await moreTrigger.boundingBox())!
+  expect(rows[0]! - (trigger.y + trigger.height)).toBeGreaterThanOrEqual(8)
   expect(rows.slice(0, 4)).toEqual(Array(4).fill(rows[0]))
   expect(rows.slice(4)).toEqual(Array(4).fill(rows[4]))
   expect(rows[4]!).toBeGreaterThan(rows[0]!)
