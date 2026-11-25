@@ -30,6 +30,29 @@ test('browser toolbar does not load native controls or runtime', async ({ page }
   expect(runtimeRequests).toEqual([])
 })
 
+for (const width of [1200, 390]) {
+  test(`device selector sits next to the logo at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await mockBackend(page)
+    await page.goto('/')
+
+    const header = page.getByRole('banner')
+    const logo = header.getByRole('button', { name: '打开应用启动器', exact: true })
+    const device = header.getByRole('button', { name: '你的手机', exact: true })
+    const theme = header.getByRole('button', { name: /切换到.*模式/ })
+    await expect(device).toBeVisible()
+    const logoBox = (await logo.boundingBox())!
+    const deviceBox = (await device.boundingBox())!
+    const themeBox = (await theme.boundingBox())!
+    const gap = deviceBox.x - (logoBox.x + logoBox.width)
+    expect(gap).toBeGreaterThan(0)
+    expect(gap).toBeLessThan(24)
+    expect(deviceBox.x + deviceBox.width).toBeLessThan(themeBox.x)
+    await device.click()
+    await expect(page.getByRole('dialog', { name: '你的手机' })).toBeVisible()
+  })
+}
+
 test('native titles are hidden on hover and restored with their latest value', async ({ page }) => {
   await mockBackend(page)
   await page.goto('/')

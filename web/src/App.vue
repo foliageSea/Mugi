@@ -238,6 +238,9 @@ async function topbarScreenAction(action: 'wake' | 'off' | 'lock', signal?: Abor
   return !signal?.aborted && controlContext.value === context
 }
 const deviceName = computed(() => device.value?.model?.replaceAll('_', ' ') || '你的手机')
+const deviceTriggerLabel = computed(
+  () => deviceName.value + (transport.value === 'webusb' ? ' · WebUSB' : ''),
+)
 const battery = ref<BatteryState | null>(null)
 const batteryPercent = computed(() => battery.value?.percent ?? 0)
 const batteryLabel = computed(() =>
@@ -434,16 +437,32 @@ onBeforeUnmount(() => {
       aria-hidden="true"
     />
     <header class="desktop-header" @dblclick="captionDoubleClick">
-      <button
-        class="brand"
-        aria-label="打开应用启动器"
-        title="Mugi · 打开应用启动器"
-        aria-haspopup="dialog"
-        :aria-expanded="launcherOpen"
-        @click="launcherOpen = true"
-      >
-        Mugi
-      </button>
+      <div class="topbar-leading">
+        <button
+          class="brand"
+          aria-label="打开应用启动器"
+          title="Mugi · 打开应用启动器"
+          aria-haspopup="dialog"
+          :aria-expanded="launcherOpen"
+          @click="launcherOpen = true"
+        >
+          Mugi
+        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="device-trigger"
+          :aria-label="deviceTriggerLabel"
+          aria-haspopup="dialog"
+          :aria-expanded="connectOpen"
+          @click="openDevice"
+        >
+          <Smartphone data-icon="inline-start" />
+          <span class="device-name">{{ deviceTriggerLabel }}</span>
+          <span class="connection-dot" :class="{ connected }" />
+          <ChevronDown data-icon="inline-end" />
+        </Button>
+      </div>
       <div class="topbar-actions">
         <TopbarMetrics
           :serial="serial"
@@ -501,14 +520,6 @@ onBeforeUnmount(() => {
           :screen-action="topbarScreenAction"
           @reboot="deviceRebooted"
         />
-        <Button variant="ghost" size="sm" class="device-trigger" @click="openDevice">
-          <Smartphone data-icon="inline-start" />
-          <span class="device-name">
-            {{ deviceName }}{{ transport === 'webusb' ? ' · WebUSB' : '' }}
-          </span>
-          <span class="connection-dot" :class="{ connected }" />
-          <ChevronDown data-icon="inline-end" />
-        </Button>
       </div>
       <DesktopWindowControls v-if="isDesktop" />
     </header>
