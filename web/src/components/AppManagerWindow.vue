@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { Package, RefreshCw, Download } from '@lucide/vue'
+import { RefreshCw, Download } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -179,10 +179,7 @@ onBeforeUnmount(() => {
     @close="emit('close')"
   >
     <template #titlebar>
-      <strong class="developer-window-title">
-        <Package />
-        应用管理
-      </strong>
+      <strong class="developer-window-title">应用管理</strong>
     </template>
     <div class="workbench-content">
       <div class="flex flex-wrap gap-2">

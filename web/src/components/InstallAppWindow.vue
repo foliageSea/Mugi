@@ -157,10 +157,7 @@ async function install() {
   >
     <h2 class="sr-only">安装应用</h2>
     <template #titlebar>
-      <strong class="installer-window-title">
-        <PackagePlus />
-        安装应用
-      </strong>
+      <strong class="installer-window-title">安装应用</strong>
     </template>
 
     <div class="installer-window-content">

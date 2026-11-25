@@ -306,6 +306,9 @@ test('Logcat streams, filters, pauses and closes its socket', async ({ page }) =
   await expect(panel.getByRole('button', { name: '停止采集' })).toBeVisible()
   const viewport = panel.getByRole('region', { name: 'Logcat 日志' })
   await expect(viewport).toContainText('startup complete')
+  const title = panel.locator('.developer-window-title')
+  await expect(title).toHaveText('Logcat')
+  await expect(title.locator('svg')).toHaveCount(0)
   await expect(viewport).toContainText('fatal failure')
   await expect(viewport.getByRole('button')).toHaveCount(0)
   await expect(panel.getByRole('button', { name: '复制筛选日志' })).toBeEnabled()
@@ -317,6 +320,7 @@ test('Logcat streams, filters, pauses and closes its socket', async ({ page }) =
   await expect(panel.getByRole('button', { name: '跟随最新' })).toBeVisible()
 
   await page.setViewportSize({ width: 375, height: 800 })
+  await expect(title).toBeVisible()
   await expect(viewport.getByText(lines[1], { exact: true })).toBeVisible()
   await expect(viewport.getByRole('button')).toHaveCount(0)
   await expect(panel.getByRole('button', { name: '复制筛选日志' })).toBeEnabled()

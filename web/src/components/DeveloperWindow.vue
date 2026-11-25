@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue'
-import { TerminalSquare, ScrollText } from '@lucide/vue'
 import WindowFrame from './WindowFrame.vue'
 const TerminalPanel = defineAsyncComponent(() => import('./TerminalPanel.vue'))
 const LogcatPanel = defineAsyncComponent(() => import('./LogcatPanel.vue'))
@@ -11,7 +10,6 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ close: [] }>()
 const title = computed(() => ({ terminal: '终端', logcat: 'Logcat' })[props.mode])
-const icon = computed(() => ({ terminal: TerminalSquare, logcat: ScrollText })[props.mode])
 const initialSize = computed(() =>
   props.mode === 'logcat' ? { width: 1020, height: 640 } : { width: 860, height: 570 },
 )
@@ -30,10 +28,7 @@ const initialSize = computed(() =>
     @close="emit('close')"
   >
     <template #titlebar>
-      <strong class="developer-window-title">
-        <component :is="icon" />
-        {{ title }}
-      </strong>
+      <strong class="developer-window-title">{{ title }}</strong>
     </template>
     <div
       class="developer-window-content"

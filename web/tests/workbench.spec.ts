@@ -786,6 +786,9 @@ test('application manager shows a real icon for non-launchable apps and falls ba
 }) => {
   await setup(page, { appIcons: true })
   await page.getByRole('button', { name: '应用管理', exact: true }).click()
+  const title = page.locator('[data-window-id="app-manager"] .developer-window-title')
+  await expect(title).toHaveText('应用管理')
+  await expect(title.locator('svg')).toHaveCount(0)
   const settings = page.getByRole('button', { name: /com.android.settings.*系统/ })
   const app = page.getByRole('button', { name: /测试应用.*com.example.app/ })
   await expect(settings.locator('img.is-loaded')).toBeVisible()
@@ -827,6 +830,20 @@ test('application manager lists all packages and confirms changes before dispatc
   await expect(page.getByRole('button', { name: /测试应用.*com.example.app/ })).toHaveCount(0)
   await page.getByRole('button', { name: '系统应用', exact: true }).click()
   await expect(page.getByRole('button', { name: /com.android.settings.*系统/ })).toBeVisible()
+})
+
+test('installer title is text-only at desktop and narrow widths', async ({ page }) => {
+  await setup(page)
+  await page.getByRole('button', { name: '安装应用', exact: true }).click()
+  const installer = page.getByTestId('installer-window')
+  const title = installer.locator('.installer-window-title')
+  for (const width of [1200, 375]) {
+    await page.setViewportSize({ width, height: 800 })
+    await expect(title).toBeVisible()
+    await expect(title).toHaveText('安装应用')
+    await expect(title.locator('svg')).toHaveCount(0)
+    await expect(installer.getByRole('button', { name: '关闭应用安装器' })).toBeVisible()
+  }
 })
 
 test('installer handles batch errors without blocking later APKs and split options', async ({

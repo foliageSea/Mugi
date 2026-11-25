@@ -2113,14 +2113,7 @@ body[data-window-gesture='resize'] * {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
   font-size: 13px;
-}
-.developer-window-title svg,
-.installer-window-title svg {
-  width: 15px;
-  height: 15px;
-  color: var(--primary);
 }
 .window-titlebar-windows {
   position: relative;
