@@ -1,0 +1,15 @@
+/bin/
+/cmd/mugi-desktop/*.syso
+*.log
+.DS_Store
+node_modules/
+/packages/*/dist/
+/web/dist/*
+!/web/dist/.gitkeep
+/playwright-report/
+/test-results/
+.agents/
+skills-lock.json
+.env
+.env.*
+!.env.example

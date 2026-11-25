@@ -1,0 +1,14 @@
+.git
+.agents
+.DS_Store
+.env
+.env.*
+**/node_modules
+bin
+web/dist
+packages/*/dist
+playwright-report
+test-results
+*.log
+*.pem
+*.key

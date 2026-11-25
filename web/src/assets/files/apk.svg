@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="apk" x2="0" y2="1">
+      <stop stop-color="#d8f5cc"/>
+      <stop offset="1" stop-color="#93ce85"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 5 58 19v27L32 60 6 46V19Z" fill="url(#apk)"/>
+  <path d="M32 32 58 19v27L32 60Z" fill="#34684740"/>
+  <path d="M6 19 32 5 58 19 32 32Z" fill="#edffdc88"/>
+  <path d="M23 27l20-12" fill="none" stroke="#4a7d54" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 38a6 6 0 0 1 12 0v4H18Z" fill="#285d40"/>
+  <path d="M20 33l-2-3m10 3 2-3" fill="none" stroke="#285d40" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="21.5" cy="37" r="0.9" fill="#d8f5cc"/>
+  <circle cx="26.5" cy="37" r="0.9" fill="#d8f5cc"/>
+</svg>

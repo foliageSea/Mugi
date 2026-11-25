@@ -1,0 +1,265 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      image: ${{ steps.release.outputs.image }}
+      commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - name: Validate the release event
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import sys
+
+          tag = os.environ['RELEASE_TAG']
+          if len(tag) > 128:
+              sys.exit('The release tag cannot exceed 128 characters.')
+          number = r'(?:0|[1-9][0-9]*)'
+          identifier = rf'(?:{number}|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)'
+          core = rf'{number}\.{number}\.{number}'
+          match = re.fullmatch(rf'v({core})(?:-{identifier}(?:\.{identifier})*)?', tag)
+          if not match:
+              sys.exit('Expected vMAJOR.MINOR.PATCH with optional SemVer prerelease and no build metadata.')
+          if any(int(part) > 65535 for part in match[1].split('.')):
+              sys.exit('Windows version components cannot exceed 65535.')
+          if os.environ['GITHUB_REF'] != f'refs/tags/{tag}':
+              sys.exit('The workflow ref does not match the published release tag.')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as outputs:
+              print(f'tag={tag}', file=outputs)
+              print(f'version={tag[1:]}', file=outputs)
+              owner = os.environ['GITHUB_REPOSITORY_OWNER'].lower()
+              print(f'image=ghcr.io/{owner}/mugi', file=outputs)
+          PY
+      - uses: actions/checkout@v7
+        with:
+          ref: 'refs/tags/${{ steps.release.outputs.tag }}'
+          persist-credentials: false
+      - name: Validate the tagged source
+        id: source
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          commit=$(git rev-parse HEAD)
+          if [[ "$commit" != "$GITHUB_SHA" ]]; then
+            echo 'The release tag no longer points to the published commit.' >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+
+          version = os.environ['RELEASE_VERSION']
+          with open('package.json', encoding='utf-8') as manifest:
+              if json.load(manifest).get('version') != version:
+                  sys.exit('The package.json version does not match the release tag.')
+          with open('package-lock.json', encoding='utf-8') as lockfile:
+              lock = json.load(lockfile)
+              root = lock.get('packages', {}).get('', {})
+              if lock.get('version') != version or root.get('version') != version:
+                  sys.exit('The package-lock.json root version does not match the release tag.')
+
+          core = version.split('-', 1)[0]
+          app = ET.parse('build/windows/app.manifest')
+          identity = app.find('{urn:schemas-microsoft-com:asm.v1}assemblyIdentity')
+          if identity is None or identity.get('version') != f'{core}.0':
+              sys.exit('The Windows application manifest version does not match the release tag core.')
+          PY
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    needs: validate
+    name: Build ${{ matrix.platform }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: windows
+            arch: arm64
+            runner: ubuntu-24.04
+          - platform: macos
+            arch: amd64
+            runner: macos-15-intel
+          - platform: macos
+            arch: arm64
+            runner: macos-15
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: '${{ needs.validate.outputs.commit }}'
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+      - run: npm ci
+      - name: Build Windows ZIP
+        if: matrix.platform == 'windows'
+        run: |
+          npm run build:windows -- --arch "$ARCH"
+          mkdir -p release-assets
+          cp "bin/mugi-windows-$ARCH.zip" "release-assets/mugi-$RELEASE_TAG-windows-$ARCH.zip"
+      - name: Build macOS ZIP and DMG
+        if: matrix.platform == 'macos'
+        run: |
+          npm run build:macos -- --arch "$ARCH" --dmg
+          mkdir -p release-assets
+          for ext in zip dmg; do
+            cp "bin/mugi-macos-$ARCH.$ext" "release-assets/mugi-$RELEASE_TAG-macos-$ARCH.$ext"
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-assets-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-assets/
+          if-no-files-found: error
+          overwrite: true
+          compression-level: 0
+
+  server-and-web:
+    needs: validate
+    name: Build Linux servers and WebUSB site
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: '${{ needs.validate.outputs.commit }}'
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+      - run: npm ci
+      - run: npm run build
+      - name: Package Linux server binaries and the WebUSB site
+        run: |
+          assets="$GITHUB_WORKSPACE/release-assets"
+          mkdir -p "$assets"
+          for arch in amd64 arm64; do
+            stage="$RUNNER_TEMP/mugi-linux-$arch"
+            mkdir -p "$stage"
+            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$stage/mugi" ./cmd/mugi
+            cp LICENSE NOTICE "$stage/"
+            tar -czf "$assets/mugi-$RELEASE_TAG-linux-$arch.tar.gz" -C "$stage" mugi LICENSE NOTICE
+          done
+          (
+            cd web/dist
+            zip -q -r "$assets/mugi-$RELEASE_TAG-web.zip" .
+          )
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-assets-server-and-web
+          path: release-assets/
+          if-no-files-found: error
+          overwrite: true
+          compression-level: 0
+
+  image:
+    needs: [validate, desktop, server-and-web]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: '${{ needs.validate.outputs.commit }}'
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: '${{ needs.validate.outputs.image }}:${{ needs.validate.outputs.tag }}'
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.validate.outputs.commit }}
+
+  publish-assets:
+    needs: [validate, desktop, server-and-web, image]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-assets-*
+          path: release-assets
+          merge-multiple: true
+      - name: Generate checksums and upload assets to the published release
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_ID: ${{ github.event.release.id }}
+        run: |
+          files=(
+            "mugi-$RELEASE_TAG-windows-amd64.zip"
+            "mugi-$RELEASE_TAG-windows-arm64.zip"
+            "mugi-$RELEASE_TAG-macos-amd64.zip"
+            "mugi-$RELEASE_TAG-macos-amd64.dmg"
+            "mugi-$RELEASE_TAG-macos-arm64.zip"
+            "mugi-$RELEASE_TAG-macos-arm64.dmg"
+            "mugi-$RELEASE_TAG-linux-amd64.tar.gz"
+            "mugi-$RELEASE_TAG-linux-arm64.tar.gz"
+            "mugi-$RELEASE_TAG-web.zip"
+          )
+          checksum="mugi-$RELEASE_TAG-SHA256SUMS.txt"
+          sha256sum -- "${files[@]}" > "$checksum"
+
+          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')
+          if [[ "$release_id" != "$RELEASE_ID" ]]; then
+            echo 'The release for this tag no longer matches the publication event.' >&2
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" "${files[@]}" "$checksum" --repo "$GITHUB_REPOSITORY" --clobber

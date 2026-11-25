@@ -1,0 +1,8 @@
+# Linux hosts only: allow the container's ADB server to access USB devices.
+# docker compose -f compose.yaml -f compose.usb.yaml up -d --build
+services:
+  mugi:
+    device_cgroup_rules:
+      - "c 189:* rmw"
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb

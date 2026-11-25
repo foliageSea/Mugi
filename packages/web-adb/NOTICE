@@ -1,0 +1,12 @@
+mugi Web ADB
+Copyright 2026 Mugi contributors
+
+This product includes scrcpy-server v4.1 from the scrcpy project:
+https://github.com/Genymobile/scrcpy
+Copyright (C) 2018 Genymobile
+Licensed under the Apache License, Version 2.0.
+
+Vendored file:
+  assets/scrcpy-server.bin (published as dist/assets/scrcpy-server.bin)
+SHA-256:
+  deacb991ed2509715160ffdc7907e47b4160eb30d1566217e9047fd5b8850cae
