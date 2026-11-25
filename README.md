@@ -2,6 +2,12 @@
   <img src="web/public/mugi.svg" alt="Mugi 应用图标" width="112" height="112">
 </p>
 <h1 align="center">Mugi</h1>
+<p align="center">
+  <a href="https://github.com/foliageSea/Mugi/releases/latest"><img src="https://img.shields.io/github/v/release/foliageSea/Mugi?style=plastic&amp;color=orange" alt="最新发布版本"></a>
+  <a href="https://github.com/foliageSea/Mugi/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/foliageSea/Mugi/release.yml?style=plastic&amp;logo=github&amp;label=build" alt="发布构建状态"></a>
+  <a href="#桌面版"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20(Web)-9f9f9f?style=plastic" alt="平台：Windows 和 macOS 桌面版，Linux Web 服务"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=plastic" alt="Apache License 2.0"></a>
+</p>
 <p align="center">开源 Android 工作台 · 屏幕镜像、多窗口投屏、文件与设备管理</p>
 <p align="center">
   <a href="#快速开始">快速开始</a> ·
