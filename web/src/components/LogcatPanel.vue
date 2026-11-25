@@ -362,15 +362,7 @@ onBeforeUnmount(() => {
         }"
       >
         <div v-for="row in visible" :key="row.id" class="logcat-row" :data-level="row.level || 'V'">
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            :aria-label="`复制日志 ${row.id + 1}`"
-            @click="copy(row.raw)"
-          >
-            <Copy />
-          </Button>
-          <span>{{ row.raw }}</span>
+          {{ row.raw }}
         </div>
       </div>
     </div>

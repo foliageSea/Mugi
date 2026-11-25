@@ -307,12 +307,20 @@ test('Logcat streams, filters, pauses and closes its socket', async ({ page }) =
   const viewport = panel.getByRole('region', { name: 'Logcat 日志' })
   await expect(viewport).toContainText('startup complete')
   await expect(viewport).toContainText('fatal failure')
+  await expect(viewport.getByRole('button')).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: '复制筛选日志' })).toBeEnabled()
 
   await panel.getByLabel('搜索日志').fill('slow frame')
   await expect(viewport).toContainText('slow frame')
   await expect(viewport).not.toContainText('startup complete')
   await panel.getByRole('button', { name: '暂停滚动' }).click()
   await expect(panel.getByRole('button', { name: '跟随最新' })).toBeVisible()
+
+  await page.setViewportSize({ width: 375, height: 800 })
+  await expect(viewport.getByText(lines[1], { exact: true })).toBeVisible()
+  await expect(viewport.getByRole('button')).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: '复制筛选日志' })).toBeEnabled()
+
   await panel.getByRole('button', { name: '清空视图' }).click()
   await panel.getByRole('button', { name: '关闭Logcat窗口', exact: true }).click()
   await expect.poll(() => closed).toBe(true)
