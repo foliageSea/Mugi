@@ -939,6 +939,71 @@ test('all nine built-in Dock controls show decorative image artwork', async ({ p
   }
 })
 
+test('Dock shows a tooltip on hover and keyboard focus', async ({ page }) => {
+  await backend(page)
+  const dock = page.getByRole('navigation', { name: '工作区操作' })
+  const launcher = dock.getByRole('button', { name: '应用启动器', exact: true })
+  const tooltip = page.getByRole('tooltip', { name: '应用启动器', exact: true })
+  await expect(tooltip).toHaveCount(0)
+  await launcher.hover()
+  await expect(tooltip).toBeVisible()
+  const bubble = page.locator('.dock-tooltip')
+  await expect(bubble).toHaveCSS('background-color', 'rgb(41, 46, 57)')
+  await expect(bubble.locator('.dock-tooltip-arrow')).toHaveCSS('fill', 'rgb(41, 46, 57)')
+  const box = (await bubble.boundingBox())!
+  const icon = (await launcher.boundingBox())!
+  expect(box.y + box.height).toBeLessThan(icon.y)
+  expect(box.x + box.width / 2).toBeCloseTo(icon.x + icon.width / 2, 0)
+  await page.mouse.move(20, 100)
+  await expect(tooltip).toHaveCount(0)
+
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Tab')
+    if (await launcher.evaluate((button) => button === document.activeElement)) break
+  }
+  await expect(launcher).toBeFocused()
+  await expect(tooltip).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(tooltip).toHaveCount(0)
+  await expect(launcher).toBeFocused()
+
+  await page.getByRole('button', { name: '切换到亮色模式' }).click()
+  await launcher.hover()
+  await expect(bubble).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+  await expect(bubble.locator('.dock-tooltip-arrow')).toHaveCSS('fill', 'rgb(255, 255, 255)')
+})
+
+test('Dock performance tooltip keeps the same short label when toggled', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 700 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await backend(page)
+  const dock = page.getByRole('navigation', { name: '工作区操作' })
+  const performance = dock.getByRole('button', { name: '性能监控', exact: true })
+  const performanceTooltip = page.getByRole('tooltip', { name: '性能监控', exact: true })
+  await performance.hover()
+  await expect(performanceTooltip).toBeVisible()
+  await performance.click()
+  await expect(performance).toHaveAttribute('aria-pressed', 'true')
+  await page.mouse.move(20, 100)
+  await performance.hover()
+  await expect(performanceTooltip).toBeVisible()
+})
+
+test('disabled Dock controls still explain their function on hover', async ({ page }) => {
+  await page.route('**/api/**', (route) => {
+    const path = new URL(route.request().url()).pathname
+    return route.fulfill({
+      json: path === '/api/capabilities' ? { network: 'local', adbAllowed: false } : {},
+    })
+  })
+  await page.goto('/')
+  const dock = page.getByRole('navigation', { name: '工作区操作' })
+  const mirror = dock.getByRole('button', { name: '镜像屏幕', exact: true })
+  await expect(mirror).toBeDisabled()
+  await mirror.hover()
+  await expect(page.getByRole('tooltip', { name: '镜像屏幕', exact: true })).toBeVisible()
+})
+
 test('generic app icon stays inside its Dock artwork', async ({ page }) => {
   await backend(page)
   await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()

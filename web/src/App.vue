@@ -13,10 +13,12 @@ import {
   Sun,
 } from '@lucide/vue'
 import { toast, Toaster } from 'vue-sonner'
+import { TooltipProvider } from 'reka-ui'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import AppIcon from '@/components/AppIcon.vue'
 import DockIcon from '@/components/DockIcon.vue'
+import DockButton from '@/components/DockButton.vue'
 import DeviceControlCenter from '@/components/DeviceControlCenter.vue'
 import {
   Dialog,
@@ -597,137 +599,119 @@ onBeforeUnmount(() => {
       </div>
     </main>
     <footer class="desktop-footer">
-      <nav ref="dock" aria-label="工作区操作" class="desktop-actions">
-        <div class="dock-track">
-          <Button
-            variant="dock"
-            size="dock"
-            title="应用启动器 · ⌘ / Ctrl K"
-            aria-label="应用启动器"
-            @click="launcherOpen = true"
-          >
-            <DockIcon name="launcher" />
-          </Button>
-          <Button
-            variant="dock"
-            size="dock"
-            title="镜像屏幕"
-            aria-label="镜像屏幕"
-            :disabled="!connected || starting"
-            @click="mirror"
-          >
-            <DockIcon name="mirror" />
-          </Button>
-          <Button
-            variant="dock"
-            size="dock"
-            :data-running="filesOpen"
-            :data-active="activeId === fileManagerId"
-            :data-window-id="fileManagerId"
-            title="文件管理器"
-            aria-label="文件管理器"
-            :disabled="!connected || !supportsFiles"
-            @click="openFiles"
-          >
-            <DockIcon name="files" />
-          </Button>
-          <Button
-            variant="dock"
-            size="dock"
-            :data-running="installOpen"
-            :data-active="activeId === installerId"
-            :data-minimized="minimized.includes(installerId)"
-            :data-window-id="installerId"
-            title="安装应用"
-            aria-label="安装应用"
-            :disabled="!connected"
-            @click="openInstaller"
-          >
-            <DockIcon name="installer" />
-          </Button>
-          <Button
-            variant="dock"
-            size="dock"
-            :data-running="performanceVisible"
-            :title="performanceOpen ? '隐藏性能监控小组件' : '显示性能监控小组件'"
-            aria-label="性能监控"
-            :aria-pressed="performanceOpen"
-            :disabled="!connected"
-            @click="performanceOpen = !performanceOpen"
-          >
-            <DockIcon name="performance" />
-          </Button>
-          <Button
-            variant="dock"
-            size="dock"
-            :data-running="terminalOpen"
-            :data-active="activeId === terminalId"
-            :data-window-id="terminalId"
-            title="终端"
-            aria-label="终端"
-            :disabled="!connected"
-            @click="openDeveloper('terminal')"
-          >
-            <DockIcon name="terminal" />
-          </Button>
-          <Button
-            variant="dock"
-            size="dock"
-            :data-running="deviceToolsOpen"
-            :data-active="activeId === 'device-tools'"
-            data-window-id="device-tools"
-            title="关于设备"
-            aria-label="关于设备"
-            :disabled="!connected"
-            @click="openDeviceTools"
-          >
-            <DockIcon name="device" />
-          </Button>
-          <Button
-            variant="dock"
-            size="dock"
-            :data-running="appManagerOpen"
-            :data-active="activeId === 'app-manager'"
-            data-window-id="app-manager"
-            title="应用管理"
-            aria-label="应用管理"
-            :disabled="!connected"
-            @click="openAppManager"
-          >
-            <DockIcon name="apps" />
-          </Button>
-          <Button
-            variant="dock"
-            size="dock"
-            :data-running="logcatOpen"
-            :data-active="activeId === logcatId"
-            :data-window-id="logcatId"
-            title="Logcat"
-            aria-label="Logcat"
-            :disabled="!connected"
-            @click="openDeveloper('logcat')"
-          >
-            <DockIcon name="logcat" />
-          </Button>
-          <Separator v-if="windows.length" orientation="vertical" class="mx-1 self-center h-9" />
-          <Button
-            v-for="item in windows"
-            :key="item.id"
-            variant="dock"
-            size="dock"
-            :data-window-id="item.id"
-            data-running="true"
-            :data-active="activeId === item.id"
-            :data-minimized="minimized.includes(item.id)"
-            :aria-label="`${minimized.includes(item.id) ? '恢复' : '切换到'} ${item.app?.name || '镜像屏幕'} 窗口`"
-            :title="`${item.app?.name || '镜像屏幕'}${minimized.includes(item.id) ? ' · 已最小化' : ''}`"
-            @click="focusWindow(item.id)"
-          >
-            <AppIcon v-if="item.app" :name="item.app.name" :package="item.app.package" />
-            <DockIcon v-else name="mirror" />
-          </Button>
-        </div>
-      </nav>
+      <TooltipProvider :delay-duration="350" ignore-non-keyboard-focus>
+        <nav ref="dock" aria-label="工作区操作" class="desktop-actions">
+          <div class="dock-track">
+            <DockButton
+              tooltip="应用启动器"
+              aria-label="应用启动器"
+              @click="launcherOpen = true"
+            >
+              <DockIcon name="launcher" />
+            </DockButton>
+            <DockButton
+              tooltip="镜像屏幕"
+              aria-label="镜像屏幕"
+              :disabled="!connected || starting"
+              @click="mirror"
+            >
+              <DockIcon name="mirror" />
+            </DockButton>
+            <DockButton
+              :data-running="filesOpen"
+              :data-active="activeId === fileManagerId"
+              :data-window-id="fileManagerId"
+              tooltip="文件管理器"
+              aria-label="文件管理器"
+              :disabled="!connected || !supportsFiles"
+              @click="openFiles"
+            >
+              <DockIcon name="files" />
+            </DockButton>
+            <DockButton
+              :data-running="installOpen"
+              :data-active="activeId === installerId"
+              :data-minimized="minimized.includes(installerId)"
+              :data-window-id="installerId"
+              tooltip="安装应用"
+              aria-label="安装应用"
+              :disabled="!connected"
+              @click="openInstaller"
+            >
+              <DockIcon name="installer" />
+            </DockButton>
+            <DockButton
+              :data-running="performanceVisible"
+              tooltip="性能监控"
+              aria-label="性能监控"
+              :aria-pressed="performanceOpen"
+              :disabled="!connected"
+              @click="performanceOpen = !performanceOpen"
+            >
+              <DockIcon name="performance" />
+            </DockButton>
+            <DockButton
+              :data-running="terminalOpen"
+              :data-active="activeId === terminalId"
+              :data-window-id="terminalId"
+              tooltip="终端"
+              aria-label="终端"
+              :disabled="!connected"
+              @click="openDeveloper('terminal')"
+            >
+              <DockIcon name="terminal" />
+            </DockButton>
+            <DockButton
+              :data-running="deviceToolsOpen"
+              :data-active="activeId === 'device-tools'"
+              data-window-id="device-tools"
+              tooltip="关于设备"
+              aria-label="关于设备"
+              :disabled="!connected"
+              @click="openDeviceTools"
+            >
+              <DockIcon name="device" />
+            </DockButton>
+            <DockButton
+              :data-running="appManagerOpen"
+              :data-active="activeId === 'app-manager'"
+              data-window-id="app-manager"
+              tooltip="应用管理"
+              aria-label="应用管理"
+              :disabled="!connected"
+              @click="openAppManager"
+            >
+              <DockIcon name="apps" />
+            </DockButton>
+            <DockButton
+              :data-running="logcatOpen"
+              :data-active="activeId === logcatId"
+              :data-window-id="logcatId"
+              tooltip="Logcat"
+              aria-label="Logcat"
+              :disabled="!connected"
+              @click="openDeveloper('logcat')"
+            >
+              <DockIcon name="logcat" />
+            </DockButton>
+            <Separator v-if="windows.length" orientation="vertical" class="mx-1 self-center h-9" />
+            <DockButton
+              v-for="item in windows"
+              :key="item.id"
+              :data-window-id="item.id"
+              data-running="true"
+              :data-active="activeId === item.id"
+              :data-minimized="minimized.includes(item.id)"
+              :aria-label="`${minimized.includes(item.id) ? '恢复' : '切换到'} ${item.app?.name || '镜像屏幕'} 窗口`"
+              :tooltip="`${item.app?.name || '镜像屏幕'}${minimized.includes(item.id) ? ' · 已最小化' : ''}`"
+              @click="focusWindow(item.id)"
+            >
+              <AppIcon v-if="item.app" :name="item.app.name" :package="item.app.package" />
+              <DockIcon v-else name="mirror" />
+            </DockButton>
+          </div>
+        </nav>
+      </TooltipProvider>
       <div class="desktop-utilities-card">
         <div class="desktop-utilities">
           <Button
