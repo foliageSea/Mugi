@@ -781,6 +781,23 @@ test('About Device shows expandable version and status details at 390px', async 
   await expect(mounts.getByText('/storage/emulated', { exact: true })).toBeVisible()
 })
 
+test('application manager renders its placeholder icon without a title bar icon', async ({
+  page,
+}) => {
+  await setup(page)
+  await page.getByRole('button', { name: '应用管理', exact: true }).click()
+  const manager = page.locator('[data-window-id="app-manager"]')
+  const placeholder = manager.locator('.app-manager-columns [data-slot="empty-icon"] svg')
+  for (const width of [1200, 390]) {
+    await page.setViewportSize({ width, height: 800 })
+    await expect(placeholder).toBeVisible()
+    await expect(manager.locator('.developer-window-title svg')).toHaveCount(0)
+  }
+  await manager.getByRole('button', { name: /测试应用.*com.example.app/ }).click()
+  await expect(placeholder).toHaveCount(0)
+  await expect(manager.locator('.app-manager-detail')).toBeVisible()
+})
+
 test('application manager shows a real icon for non-launchable apps and falls back without metadata', async ({
   page,
 }) => {

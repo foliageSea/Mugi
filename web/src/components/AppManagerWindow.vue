@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { RefreshCw, Download } from '@lucide/vue'
+import { RefreshCw, Download, Package } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -347,7 +347,7 @@ onBeforeUnmount(() => {
         <Empty v-else>
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <Package />
+              <Package aria-hidden="true" />
             </EmptyMedia>
           </EmptyHeader>
         </Empty>
