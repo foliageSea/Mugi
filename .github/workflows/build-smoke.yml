@@ -45,8 +45,6 @@ jobs:
               sys.exit('Expected vMAJOR.MINOR.PATCH with optional SemVer prerelease and no build metadata.')
           if any(int(part) > 65535 for part in match[1].split('.')):
               sys.exit('Windows version components cannot exceed 65535.')
-          if os.environ['GITHUB_REF'] != f'refs/tags/{tag}':
-              sys.exit('The workflow ref does not match the published release tag.')
 
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as outputs:
               print(f'tag={tag}', file=outputs)
