@@ -33,6 +33,7 @@ type DeviceBackend interface {
 	IsUnlocked(serial string) (bool, error)
 	Pair(host string, port int, code string) error
 	Connect(host string, port int) (string, error)
+	Disconnect(serial string) error
 	Apps(serial string) ([]adb.App, error)
 	StartSession(serial string, opts scrcpy.SessionOptions) (*scrcpy.Session, error)
 	Push(serial, remotePath string, r io.Reader) error
@@ -47,16 +48,19 @@ type DeviceBackend interface {
 
 // Server wires Gin routes to backends and sessions.
 type Server struct {
-	adbMu      sync.RWMutex
-	sessionMu  sync.Mutex // serializes session admission and prevents duplicate windows
-	terminals  int        // guarded by adbMu
-	logcats    int        // guarded by adbMu
-	backend    DeviceBackend
-	manager    *scrcpy.Manager
-	accessMode AccessMode
-	upgrader   websocket.Upgrader
-	hubsMu     sync.Mutex
-	hubs       map[string]*sessionHub // guarded by hubsMu
+	adbMu         sync.RWMutex
+	sessionMu     sync.Mutex // serializes session admission and prevents duplicate windows
+	deviceMu      sync.Mutex // guards pending starts and disconnects by serial
+	starting      map[string]int
+	disconnecting map[string]bool
+	terminals     int // guarded by adbMu
+	logcats       int // guarded by adbMu
+	backend       DeviceBackend
+	manager       *scrcpy.Manager
+	accessMode    AccessMode
+	upgrader      websocket.Upgrader
+	hubsMu        sync.Mutex
+	hubs          map[string]*sessionHub // guarded by hubsMu
 }
 
 // AccessMode controls how the client network is classified.
@@ -115,10 +119,12 @@ func NewWithAccessMode(backend DeviceBackend, m *scrcpy.Manager, mode AccessMode
 		mode = AccessAuto
 	}
 	return &Server{
-		backend:    backend,
-		manager:    m,
-		accessMode: mode,
-		hubs:       map[string]*sessionHub{},
+		backend:       backend,
+		manager:       m,
+		accessMode:    mode,
+		hubs:          map[string]*sessionHub{},
+		starting:      make(map[string]int),
+		disconnecting: make(map[string]bool),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				origin := r.Header.Get("Origin")
@@ -162,6 +168,7 @@ func (s *Server) Router(webFS http.FileSystem) *gin.Engine {
 		local.GET("/devices", s.listDevices)
 		local.POST("/devices/pair", s.pairDevice)
 		local.POST("/devices/connect", s.connectDevice)
+		local.POST("/devices/disconnect", s.disconnectDevice)
 		local.POST("/adb/release", s.releaseAdb)
 		local.GET("/devices/:serial/apps", s.listApps)
 		local.GET("/devices/:serial/apps/:package/icon", s.appIcon)
@@ -328,6 +335,60 @@ func (s *Server) connectDevice(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "serial": serial})
+}
+
+func (s *Server) disconnectDevice(c *gin.Context) {
+	var req struct {
+		Serial string `json:"serial" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, err)
+		return
+	}
+	if strings.ContainsAny(req.Serial, " \t\r\n\x00") {
+		fail(c, http.StatusBadRequest, errors.New("invalid ADB serial"))
+		return
+	}
+
+	if err := s.beginDisconnect(req.Serial); err != nil {
+		fail(c, http.StatusConflict, err)
+		return
+	}
+	defer func() {
+		s.deviceMu.Lock()
+		delete(s.disconnecting, req.Serial)
+		s.deviceMu.Unlock()
+	}()
+
+	err := s.backend.Disconnect(req.Serial)
+	switch {
+	case errors.Is(err, adb.ErrDeviceNotFound):
+		fail(c, http.StatusNotFound, err)
+	case errors.Is(err, adb.ErrNotNetworkDevice):
+		fail(c, http.StatusBadRequest, err)
+	case err != nil:
+		fail(c, http.StatusBadGateway, err)
+	default:
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+func (s *Server) beginDisconnect(serial string) error {
+	s.deviceMu.Lock()
+	defer s.deviceMu.Unlock()
+	if s.disconnecting[serial] {
+		return errors.New("正在断开该 ADB 设备")
+	}
+	if s.starting[serial] > 0 {
+		return errors.New("该设备正在启动投屏，请等待启动完成后关闭投屏窗口，再断开连接")
+	}
+	for _, session := range s.manager.List() {
+		if session.Serial == serial {
+			return errors.New("请先关闭该设备的投屏窗口，再断开 ADB 连接")
+		}
+	}
+	s.disconnecting[serial] = true
+	return nil
 }
 
 func (s *Server) listApps(c *gin.Context) {
@@ -650,6 +711,25 @@ func (s *Server) startSession(c *gin.Context) {
 		fail(c, http.StatusBadRequest, err)
 		return
 	}
+	// Reserve this serial before probing it, so a disconnect cannot race a
+	// starting session between its unlock check and registration.
+	s.deviceMu.Lock()
+	if s.disconnecting[serial] {
+		s.deviceMu.Unlock()
+		fail(c, http.StatusConflict, errors.New("正在断开该 ADB 设备"))
+		return
+	}
+	s.starting[serial]++
+	s.deviceMu.Unlock()
+	defer func() {
+		s.deviceMu.Lock()
+		s.starting[serial]--
+		if s.starting[serial] == 0 {
+			delete(s.starting, serial)
+		}
+		s.deviceMu.Unlock()
+	}()
+
 	unlocked, err := s.backend.IsUnlocked(serial)
 	if err != nil {
 		fail(c, http.StatusBadGateway, err)

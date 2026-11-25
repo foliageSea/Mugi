@@ -29,6 +29,8 @@ func (b *UnavailableBackend) Pair(string, int, string) error { return b.err }
 
 func (b *UnavailableBackend) Connect(string, int) (string, error) { return "", b.err }
 
+func (b *UnavailableBackend) Disconnect(string) error { return b.err }
+
 func (b *UnavailableBackend) Apps(string) ([]adb.App, error) { return nil, b.err }
 
 func (b *UnavailableBackend) StartSession(string, scrcpy.SessionOptions) (*scrcpy.Session, error) {

@@ -23,6 +23,7 @@ const props = defineProps<{
   adbWindowsOpen: boolean
   switchingTransport: boolean
   adbAllowed: boolean
+  disconnectAdb: (serial: string) => Promise<void>
 }>()
 const emit = defineEmits<{
   refresh: []
@@ -39,6 +40,7 @@ const mode = ref(!props.adbAllowed || props.transport === 'webusb' ? 'webusb' : 
   connectPort = ref(''),
   code = ref(''),
   busy = ref(''),
+  disconnectingSerial = ref(''),
   adbError = ref(''),
   wirelessError = ref('')
 watch([() => props.transport, () => props.adbAllowed], ([value, adbAllowed]) => {
@@ -65,6 +67,21 @@ async function releaseAdb() {
   } catch (cause) {
     adbError.value = `无法释放：${errorText(cause)}。可在电脑终端运行 adb kill-server。`
   } finally {
+    busy.value = ''
+  }
+}
+async function disconnectDevice(device: Device) {
+  if (!device.network || busy.value || props.loading || props.switchingTransport) return
+  busy.value = 'disconnect'
+  disconnectingSerial.value = device.serial
+  adbError.value = ''
+  try {
+    await props.disconnectAdb(device.serial)
+    toast.success('设备已断开')
+  } catch (error) {
+    adbError.value = `无法断开：${errorText(error)}`
+  } finally {
+    disconnectingSerial.value = ''
     busy.value = ''
   }
 }
@@ -173,15 +190,31 @@ async function wireless(pair: boolean) {
                 }}
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              :disabled="d.state !== 'device' || switchingTransport"
-              @click="chooseDevice(d.serial)"
-            >
-              <Check v-if="serial === d.serial" data-icon="inline-start" />
-              {{ serial === d.serial ? '当前设备' : '使用' }}
-            </Button>
+            <div class="flex shrink-0 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="d.state !== 'device' || switchingTransport || !!busy"
+                @click="chooseDevice(d.serial)"
+              >
+                <Check v-if="serial === d.serial" data-icon="inline-start" />
+                {{ serial === d.serial ? '当前设备' : '使用' }}
+              </Button>
+              <Button
+                v-if="d.network"
+                variant="outline"
+                size="sm"
+                :disabled="loading || switchingTransport || !!busy"
+                @click="disconnectDevice(d)"
+              >
+                <LoaderCircle
+                  v-if="disconnectingSerial === d.serial"
+                  data-icon="inline-start"
+                  class="animate-spin"
+                />
+                断开
+              </Button>
+            </div>
           </div>
           <p v-if="!devices.length" class="py-8 text-center text-sm text-muted-foreground">
             {{ loading ? '正在寻找设备…' : '未发现设备' }}
@@ -189,7 +222,7 @@ async function wireless(pair: boolean) {
         </div>
         <Button
           variant="outline"
-          :disabled="loading || switchingTransport"
+          :disabled="loading || switchingTransport || !!busy"
           @click="emit('refresh')"
         >
           <RefreshCw :class="{ 'animate-spin': loading }" data-icon="inline-start" />

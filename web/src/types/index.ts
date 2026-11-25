@@ -2,6 +2,7 @@ export interface Device {
   serial: string
   state: string
   model: string
+  network?: boolean
   width?: number
   height?: number
 }

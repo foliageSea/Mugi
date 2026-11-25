@@ -288,6 +288,16 @@ func (b *AdbBackend) Connect(host string, port int) (string, error) {
 	return b.Adb.Connect(host, port)
 }
 
+func (b *AdbBackend) Disconnect(serial string) error {
+	if err := b.Adb.Disconnect(serial); err != nil {
+		return err
+	}
+	b.mu.Lock()
+	delete(b.pushed, serial)
+	b.mu.Unlock()
+	return nil
+}
+
 // Release stops the local ADB daemon so the browser can claim the USB ADB
 // interface directly through WebUSB.
 func (b *AdbBackend) Release() error { return b.Adb.KillServer() }

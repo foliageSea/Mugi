@@ -4,8 +4,11 @@ package adb
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"regexp"
@@ -18,11 +21,12 @@ import (
 
 // Device is one adb-visible device.
 type Device struct {
-	Serial string `json:"serial"`
-	State  string `json:"state"` // device, unauthorized, offline
-	Model  string `json:"model"`
-	Width  int    `json:"width,omitempty"`
-	Height int    `json:"height,omitempty"`
+	Serial  string `json:"serial"`
+	State   string `json:"state"` // device, unauthorized, offline
+	Model   string `json:"model"`
+	Network bool   `json:"network,omitempty"` // supports per-device adb disconnect
+	Width   int    `json:"width,omitempty"`
+	Height  int    `json:"height,omitempty"`
 }
 
 // App is a launchable application.
@@ -84,8 +88,22 @@ func (c *Client) run(timeout time.Duration, args ...string) (string, string, err
 	return stdout.String(), stderr.String(), err
 }
 
-// Devices lists connected devices.
+// Devices lists adb-visible devices and queries the dimensions of online ones.
 func (c *Client) Devices() ([]Device, error) {
+	devices, err := c.deviceTransports()
+	if err != nil {
+		return nil, err
+	}
+	for i := range devices {
+		d := &devices[i]
+		if d.State == "device" {
+			d.Width, d.Height, _ = c.DisplaySize(d.Serial)
+		}
+	}
+	return devices, nil
+}
+
+func (c *Client) deviceTransports() ([]Device, error) {
 	out, _, err := c.run(10*time.Second, "devices", "-l")
 	if err != nil {
 		return nil, err
@@ -106,12 +124,40 @@ func (c *Client) Devices() ([]Device, error) {
 		if m := modelRe.FindStringSubmatch(line); m != nil {
 			d.Model = m[1]
 		}
-		if d.State == "device" {
-			d.Width, d.Height, _ = c.DisplaySize(d.Serial)
+		d.Network = isNetworkSerial(d.Serial) && d.State != "no"
+		for _, field := range fields[2:] {
+			if strings.HasPrefix(field, "usb:") {
+				d.Network = false
+				break
+			}
 		}
 		devices = append(devices, d)
 	}
-	return devices, nil
+	return devices, sc.Err()
+}
+
+var (
+	networkHost = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
+	mdnsSerial  = regexp.MustCompile(`(?i)^adb-[a-z0-9_-]+\._adb-tls-connect\._tcp\.?$`)
+	numericPort = regexp.MustCompile(`^[0-9]+$`)
+)
+
+// Only recognize serial formats that adb disconnect accepts for an individual
+// TCP or wireless-debugging transport. In particular, emulator-N is not one.
+func isNetworkSerial(serial string) bool {
+	if mdnsSerial.MatchString(serial) {
+		return true
+	}
+	host, port, err := net.SplitHostPort(serial)
+	if err != nil || !numericPort.MatchString(port) {
+		return false
+	}
+	n, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || n == 0 {
+		return false
+	}
+	ip, err := netip.ParseAddr(host)
+	return networkHost.MatchString(host) || (err == nil && ip.Is6())
 }
 
 var displaySizeRe = regexp.MustCompile(`(?m)^Physical size:\s*(\d+)x(\d+)\s*$`)
@@ -161,6 +207,48 @@ func (c *Client) Connect(host string, port int) (string, error) {
 		return "", fmt.Errorf("connect failed: %s", strings.TrimSpace(out))
 	}
 	return fmt.Sprintf("%s:%d", host, port), nil
+}
+
+// ErrDeviceNotFound reports that the requested transport is not listed by adb.
+var ErrDeviceNotFound = errors.New("未找到该 ADB 设备")
+
+// ErrNotNetworkDevice reports that the serial cannot be disconnected over ADB.
+var ErrNotNetworkDevice = errors.New("仅支持断开网络 ADB 设备；USB 设备请拔线")
+
+// Disconnect removes one network transport, whether or not it is online. The
+// device list is read without probing devices via shell before deciding if it
+// is safe to send the command. Never pass an empty serial: ADB disconnects all
+// network devices when no target is specified.
+func (c *Client) Disconnect(serial string) error {
+	if serial == "" {
+		return ErrNotNetworkDevice
+	}
+	devices, err := c.deviceTransports()
+	if err != nil {
+		return fmt.Errorf("list ADB transports: %w", err)
+	}
+	found := false
+	for _, device := range devices {
+		if device.Serial != serial {
+			continue
+		}
+		if !device.Network || found {
+			return ErrNotNetworkDevice
+		}
+		found = true
+	}
+	if !found {
+		return ErrDeviceNotFound
+	}
+
+	stdout, stderr, err := c.run(15*time.Second, "disconnect", serial)
+	if err != nil {
+		return fmt.Errorf("adb disconnect failed: %w: %s", err, strings.TrimSpace(stdout+stderr))
+	}
+	if strings.TrimSpace(stdout) != "disconnected "+serial {
+		return fmt.Errorf("adb disconnect failed: %s", strings.TrimSpace(stdout+stderr))
+	}
+	return nil
 }
 
 // KillServer releases USB interfaces claimed by the local adb server. This is

@@ -1193,7 +1193,7 @@ test('USB disconnect blocks reconnect and mode changes until interface release c
   await page.getByRole('button', { name: '断开 WebUSB', exact: true }).click()
   await expect(page.getByRole('button', { name: '选择 USB 设备', exact: true })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'USB / 已连接', exact: true })).toBeDisabled()
-  await expect(page.getByRole('button', { name: '释放系统 ADB', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '释放系统 ADB', exact: true })).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => (window as any).__closeCalls)).toBe(1)
   // Multiple cleanup paths must share the same close, never release a later connection.
   const sharedClose = await page.evaluate(() => {
@@ -1202,8 +1202,11 @@ test('USB disconnect blocks reconnect and mode changes until interface release c
   })
   expect(sharedClose).toBe(true)
   await page.evaluate(() => (window as any).__finishClose())
-  await expect(page.getByRole('button', { name: '选择 USB 设备', exact: true })).toBeEnabled()
-  await expect(page.getByRole('button', { name: 'USB / 已连接', exact: true })).toBeEnabled()
+  const dialog = page.getByRole('dialog', { name: '你的手机', exact: true })
+  await expect(dialog.getByRole('button', { name: '选择 USB 设备', exact: true })).toBeEnabled()
+  await expect(dialog.getByRole('button', { name: 'USB / 已连接', exact: true })).toBeEnabled()
+  await expect(dialog.getByRole('button', { name: '断开 WebUSB', exact: true })).toHaveCount(0)
+  await expect(page.locator('.device-trigger')).toContainText('你的手机 · WebUSB')
   expect(await page.evaluate(() => (window as any).__closeCalls)).toBe(1)
   expect(requests).toEqual([])
 })

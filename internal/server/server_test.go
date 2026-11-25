@@ -254,6 +254,7 @@ func TestFileListingProtectsStorageRoot(t *testing.T) {
 func (stubBackend) IsUnlocked(string) (bool, error)     { return true, nil }
 func (stubBackend) Pair(string, int, string) error      { return nil }
 func (stubBackend) Connect(string, int) (string, error) { return "test", nil }
+func (stubBackend) Disconnect(string) error             { panic("unexpected device disconnect") }
 func (stubBackend) Apps(string) ([]adb.App, error)      { return nil, nil }
 func (stubBackend) StartSession(string, scrcpy.SessionOptions) (*scrcpy.Session, error) {
 	panic("StartSession must not be called for invalid input")

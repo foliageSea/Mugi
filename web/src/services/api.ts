@@ -198,6 +198,7 @@ export const api = {
   capabilities: () => request<Capabilities>('GET', '/api/capabilities'),
   devices: () => request<{ devices: Device[] }>('GET', '/api/devices'),
   releaseAdb: () => request('POST', '/api/adb/release'),
+  disconnect: (serial: string) => request('POST', '/api/devices/disconnect', { serial }),
   apps: (serial: string) => request<{ apps: AndroidApp[] }>('GET', `${devicePath(serial)}/apps`),
   pair: (host: string, port: number, code: string) =>
     request('POST', '/api/devices/pair', { host, port, code }),

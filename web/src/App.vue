@@ -84,6 +84,7 @@ const {
   supportsFiles,
   setWebUsbConnection,
   selectAdbDevice,
+  disconnectAdbDevice,
   transport,
   webUsb,
   switchTransport,
@@ -797,6 +798,7 @@ onBeforeUnmount(() => {
       :usb-error="usbError"
       :adb-windows-open="adbWindowsOpen"
       :adb-allowed="adbAllowed"
+      :disconnect-adb="disconnectAdbDevice"
       @refresh="refreshDevices"
       @select="selectDevice"
       @webusb="selectWebUsb"

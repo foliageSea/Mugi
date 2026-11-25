@@ -406,6 +406,19 @@ export function useDesktop() {
   function selectAdbDevice(value: string) {
     serial.value = value
   }
+  async function disconnectAdbDevice(target: string) {
+    await api.disconnect(target)
+    if (disposed) return
+    // Ignore a scan started before the disconnect, so it can't restore the old row.
+    ++deviceGeneration
+    loadingDevices.value = false
+    devices.value = devices.value.filter((d) => d.serial !== target)
+    if (transport.value === 'adb' && serial.value === target) {
+      filesOpen.value = false
+      serial.value = ''
+    }
+    await refreshDevices()
+  }
   function disconnectWebUsb(): Promise<void> {
     if (disconnectingUsb) return disconnectingUsb
     switchingTransport.value = true
@@ -505,6 +518,7 @@ export function useDesktop() {
     refreshDevices,
     setWebUsbConnection,
     selectAdbDevice,
+    disconnectAdbDevice,
     switchTransport,
     disconnectWebUsb,
     switchingTransport,
