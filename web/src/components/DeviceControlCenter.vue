@@ -5,6 +5,7 @@ import {
   Bluetooth,
   ChevronDown,
   House,
+  LoaderCircle,
   LockKeyhole,
   Minus,
   MonitorOff,
@@ -120,10 +121,8 @@ const open = ref(false)
 const confirmOpen = ref(false)
 const busy = ref('')
 const busyOperation = ref<Operation | ScreenAction>()
-const error = ref('')
 const announcement = ref('')
 const reading = ref(false)
-const readError = ref('')
 const state = ref<DeviceControlState | null>(null)
 const brightnessDraft = ref(128)
 const volumeFeedback = ref('')
@@ -201,8 +200,6 @@ async function readControls() {
   readController = controller
   const validRead = () => readController === controller && open.value && isCurrent(target)
   reading.value = true
-  readError.value = ''
-  error.value = ''
   volumeFeedback.value = ''
   try {
     await write?.promise
@@ -217,7 +214,9 @@ async function readControls() {
   } catch (cause) {
     if (validRead()) {
       state.value = null
-      readError.value = '读取设备状态失败：' + errorText(cause)
+      toast.error('读取设备状态失败：' + errorText(cause), {
+        description: '点击控制中心右上角的刷新按钮重试。',
+      })
     }
   } finally {
     if (validRead()) {
@@ -235,7 +234,6 @@ watch(
         open.value = false
         return
       }
-      error.value = ''
       announcement.value = ''
       void readControls()
       return
@@ -243,7 +241,6 @@ watch(
     readController?.abort()
     readController = undefined
     reading.value = false
-    readError.value = ''
     state.value = null
     brightnessDraft.value = 128
     volumeFeedback.value = ''
@@ -263,7 +260,6 @@ function invalidate() {
   write = undefined
   busy.value = ''
   busyOperation.value = undefined
-  error.value = ''
   announcement.value = ''
 }
 watch(() => [props.contextKey, props.serial, props.connected] as const, invalidate)
@@ -301,7 +297,6 @@ function run(command: Command) {
   write = job
   busy.value = command.label
   busyOperation.value = 'screen' in command ? command.screen : command.operation
-  error.value = ''
   announcement.value = ''
   const validWrite = () => write === job && !controller.signal.aborted && isCurrent(target)
   const visibleWrite = () => validWrite() && open.value
@@ -339,7 +334,7 @@ function run(command: Command) {
           const { wifi, wifiConnected, bluetooth, airplane } = data
           patchState({ wifi, wifiConnected, bluetooth, airplane })
           if (data[network] !== enabled) {
-            error.value = command.label + '未生效，已显示设备回读的状态。'
+            toast.error(command.label + '未生效，已显示设备回读的状态。')
             return
           }
         } else if (volume) {
@@ -379,13 +374,18 @@ function run(command: Command) {
             brightnessDraft.value = data.brightness
           if (manual && (data.brightness === null || data.autoBrightness === true))
             throw new Error('设备没有返回可确认的手动亮度')
-          if (manual && queuedBrightness === undefined && data.brightness !== Number(command.value))
-            error.value = '设备未达到目标亮度，已显示实际亮度。'
+          if (
+            manual &&
+            queuedBrightness === undefined &&
+            data.brightness !== Number(command.value)
+          ) {
+            toast.error('设备未达到目标亮度，已显示实际亮度。')
+            return
+          }
           if (!manual && data.autoBrightness !== true) throw new Error('设备没有确认自动亮度已开启')
-          readError.value = ''
         }
       }
-      if (visibleWrite() && !error.value)
+      if (visibleWrite())
         announcement.value = volume
           ? volumeFeedback.value || '已发送：' + command.label
           : '已执行：' + command.label
@@ -394,17 +394,16 @@ function run(command: Command) {
       if (operation && isNetwork(operation)) clearNetwork(operation)
       if (volume) {
         if (sent) patchState({ volume: null })
-        volumeFeedback.value = sent
-          ? '未能回读媒体音量'
-          : command.label + '失败：' + errorText(cause)
+        toast.error(sent ? '未能回读媒体音量' : command.label + '失败：' + errorText(cause))
         return
       }
       if (sent && (operation === 'brightness' || operation === 'auto-brightness'))
         patchState({ brightness: null, autoBrightness: null })
       if (operation === 'brightness' && !sent && revision === brightnessRevision)
         brightnessDraft.value = state.value?.brightness ?? 128
-      error.value =
-        command.label + (sent ? '请求已发送，未能确认状态：' : '失败：') + errorText(cause)
+      toast.error(
+        command.label + (sent ? '请求已发送，未能确认状态：' : '失败：') + errorText(cause),
+      )
     } finally {
       if (write === job) {
         write = undefined
@@ -483,6 +482,11 @@ function runExtraCommand(event: MouseEvent, command: DeviceCommand) {
   )
 }
 
+function keepOpenOnToast(event: CustomEvent<{ originalEvent: PointerEvent }>) {
+  const target = event.detail.originalEvent.target
+  if (target instanceof Element && target.closest('[data-sonner-toast]')) event.preventDefault()
+}
+
 async function focusTitle(event: Event) {
   const panel = event.target
   if (!(panel instanceof HTMLElement)) return
@@ -514,6 +518,7 @@ async function focusTitle(event: Event) {
       :show-overlay="false"
       :show-close-button="false"
       @open-auto-focus="focusTitle"
+      @pointer-down-outside="keepOpenOnToast"
     >
       <header class="control-center-header">
         <div class="control-center-identity">
@@ -533,7 +538,6 @@ async function focusTitle(event: Event) {
           <RefreshCw aria-hidden="true" :class="{ 'motion-safe:animate-spin': reading }" />
         </button>
       </header>
-      <p v-if="error" role="alert" class="control-center-error">{{ error }}</p>
       <p role="status" class="sr-only">
         {{ busy ? '正在执行：' + busy : volumeFeedback ? '' : announcement }}
       </p>
@@ -553,6 +557,7 @@ async function focusTitle(event: Event) {
                 :role="typeof state?.[connection.operation] === 'boolean' ? 'switch' : undefined"
                 :aria-label="connection.label"
                 :aria-checked="state?.[connection.operation] ?? undefined"
+                :aria-busy="busyOperation === connection.operation || undefined"
                 :aria-disabled="
                   reading || !!busy || typeof state?.[connection.operation] !== 'boolean'
                 "
@@ -564,13 +569,18 @@ async function focusTitle(event: Event) {
                 <span class="control-center-tile-copy">
                   <span>{{ connection.label }}</span>
                   <small>
-                    {{
-                      busyOperation === connection.operation
-                        ? '确认中…'
-                        : connection.operation === 'wifi'
+                    <LoaderCircle
+                      v-if="busyOperation === connection.operation"
+                      class="control-center-tile-spinner motion-safe:animate-spin"
+                      aria-hidden="true"
+                    />
+                    <template v-else>
+                      {{
+                        connection.operation === 'wifi'
                           ? wifiText
                           : switchText(state?.[connection.operation])
-                    }}
+                      }}
+                    </template>
                   </small>
                 </span>
               </button>
@@ -671,17 +681,6 @@ async function focusTitle(event: Event) {
         <p v-if="volumeFeedback" class="control-center-volume-feedback" role="status">
           {{ volumeFeedback }}
         </p>
-        <div v-if="readError" class="control-center-feedback">
-          <p role="alert" class="control-center-error">{{ readError }}</p>
-          <button
-            type="button"
-            class="control-center-command"
-            :disabled="reading || !!busy"
-            @click="readControls"
-          >
-            重试
-          </button>
-        </div>
 
         <div class="control-center-groups">
           <div
@@ -879,6 +878,9 @@ async function focusTitle(event: Event) {
   line-height: 1.2;
 }
 .control-center-tile-copy small {
+  display: flex;
+  min-height: 1.2em;
+  align-items: center;
   color: var(--cc-muted);
   font-size: 11px;
   font-weight: 450;
@@ -917,6 +919,10 @@ async function focusTitle(event: Event) {
   width: 16px;
   height: 16px;
   flex: none;
+}
+.device-control-center button .control-center-tile-spinner {
+  width: 12px;
+  height: 12px;
 }
 .device-control-center button .control-center-chevron {
   width: 14px;
@@ -1040,20 +1046,6 @@ async function focusTitle(event: Event) {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
-.control-center-feedback {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-.control-center-feedback {
-  justify-content: flex-end;
-}
-.control-center-feedback .control-center-error {
-  min-width: 0;
-  flex: 1 0 140px;
-  margin: 0;
-}
 .control-center-command {
   min-height: 32px;
   max-width: 100%;
@@ -1114,18 +1106,6 @@ async function focusTitle(event: Event) {
   padding-inline: 3px;
   font-size: 11px;
 }
-.control-center-error {
-  flex: none;
-  max-height: 64px;
-  overflow: auto;
-  margin: 0 14px 5px;
-  padding: 6px 9px;
-  border: 1px solid light-dark(color-mix(in srgb, var(--destructive) 45%, transparent), #ff9da66a);
-  border-radius: 10px;
-  color: var(--cc-danger);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
 .device-control-center button:focus-visible {
   outline: 2px solid var(--cc-accent);
   outline-offset: -2px;
@@ -1134,6 +1114,9 @@ async function focusTitle(event: Event) {
 .device-control-center button[aria-disabled='true'] {
   cursor: not-allowed;
   opacity: 0.58;
+}
+.device-control-center button[aria-busy='true'] {
+  opacity: 1;
 }
 @media (hover: hover) {
   .control-center-tile:not([aria-disabled='true']):hover,

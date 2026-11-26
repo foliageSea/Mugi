@@ -484,7 +484,23 @@ test('volume keys show the reported media level, even when a key does not change
   await expect.poll(() => stateCalls().length).toBeGreaterThan(previousReads)
   await expect(panel.getByText('媒体音量未变化', { exact: true })).toBeVisible()
   await expect(level(7)).toBeVisible()
-  await expect(panel.getByRole('alert')).toHaveCount(0)
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0)
+})
+
+test('a failed media volume readback shows a toast and clears the unconfirmed level', async ({
+  page,
+}) => {
+  const { mock } = await setup(page)
+  const { panel } = await openControlCenter(page)
+  const volume = panel.getByRole('group', { name: '媒体音量', exact: true })
+  await expect(volume.getByText(/^5\s*\/\s*15$/)).toBeVisible()
+  mock.controlStateError = '测试：无法读取媒体音量'
+  await volume.getByRole('button', { name: '调高音量', exact: true }).click()
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveText(
+    '未能回读媒体音量',
+  )
+  await expect(volume.getByText('音量未知', { exact: true })).toBeVisible()
+  await expect(panel.getByText('未能回读媒体音量', { exact: true })).toHaveCount(0)
 })
 
 test('the auto-brightness icon exposes and confirms the device mode', async ({ page }) => {
@@ -567,11 +583,16 @@ test('radio switches reflect control-state and wait for confirmed readback', asy
     await expect.poll(() => actions('control-state')).toHaveLength(2)
     await expect(wifi).toBeDisabled()
     await expect(wifi).toBeChecked()
+    await expect(wifi).toHaveAttribute('aria-busy', 'true')
+    await expect(wifi.locator('small svg[aria-hidden="true"]')).toBeVisible()
+    await expect(wifi.locator('small')).toHaveText('')
+    await expect(bluetooth).not.toHaveAttribute('aria-busy', 'true')
   } finally {
     mock.controlStateResponse = undefined
     response.resolve()
   }
   await expect(wifi).not.toBeChecked()
+  await expect(wifi).not.toHaveAttribute('aria-busy', 'true')
   await expect(wifi).toContainText('已关闭')
   await wifi.click()
   await expect(wifi).toBeChecked()
@@ -606,7 +627,10 @@ test('a failed radio readback leaves the affected radio unknown, not unchecked',
   await expect(confirmation).toBeVisible()
   mock.controlStateError = '测试：无法回读设备状态'
   await confirmation.getByRole('button', { name: '确认操作', exact: true }).click()
-  await expect(panel.getByRole('alert')).toContainText(mock.controlStateError)
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toContainText(
+    mock.controlStateError,
+  )
+  await expect(panel.getByRole('alert')).toHaveCount(0)
   await expect(wifi).toHaveCount(0)
   const unknownWifi = panel.getByRole('button', { name: 'Wi-Fi', exact: true })
   await expect(unknownWifi).toBeDisabled()
@@ -618,13 +642,21 @@ test('a failed radio readback leaves the affected radio unknown, not unchecked',
   ])
 })
 
-test('a failed control-state read keeps navigation available and can be retried', async ({
+test('a failed control-state read shows a dismissible toast and can be retried from the panel', async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 360, height: 700 })
   const { calls, mock } = await setup(page)
   mock.controlStateError = '测试：无法读取设备状态'
   const { panel } = await openControlCenter(page)
-  await expect(panel.getByRole('alert')).toHaveText('读取设备状态失败：' + mock.controlStateError)
+  const toast = page.locator('[data-sonner-toast][data-type="error"]')
+  await expect(toast).toContainText('读取设备状态失败：' + mock.controlStateError)
+  await expect(toast).toContainText('点击控制中心右上角的刷新按钮重试。')
+  await expect(panel.getByRole('alert')).toHaveCount(0)
+  await expectNoHorizontalOverflow(panel)
+  await toast.getByRole('button', { name: 'Close toast' }).click()
+  await expect(toast).toBeHidden()
+  await expect(panel).toBeVisible()
   for (const name of ['Wi-Fi', '蓝牙', '飞行模式']) {
     const radio = panel.getByRole('button', { name, exact: true })
     await expect(radio).toBeDisabled()
@@ -643,7 +675,7 @@ test('a failed control-state read keeps navigation available and can be retried'
   mock.controlStateError = ''
   mock.controlState.wifi_connected = null
   mock.controlState.bluetooth = null
-  await panel.getByRole('button', { name: '重试', exact: true }).click()
+  await panel.getByRole('button', { name: '刷新状态', exact: true }).click()
   const wifi = panel.getByRole('switch', { name: 'Wi-Fi', exact: true })
   await expect(wifi).toBeChecked()
   await expect(wifi).toContainText('已开启')
@@ -651,7 +683,7 @@ test('a failed control-state read keeps navigation available and can be retried'
   await expect(bluetooth).toBeDisabled()
   await expect(bluetooth).toContainText('状态未知')
   await expect(panel.getByRole('switch', { name: '蓝牙', exact: true })).toHaveCount(0)
-  await expect(panel.getByRole('alert')).toHaveCount(0)
+  await expect(toast).toHaveCount(0)
   expect(
     calls.filter(({ operation }) =>
       /^(brightness|auto-brightness|volume-up|volume-down)$/.test(operation),
