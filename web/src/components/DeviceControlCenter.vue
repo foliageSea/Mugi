@@ -511,6 +511,7 @@ async function focusTitle(event: Event) {
     <DialogContent
       variant="control-center"
       class="device-control-center"
+      :show-overlay="false"
       :show-close-button="false"
       @open-auto-focus="focusTitle"
     >

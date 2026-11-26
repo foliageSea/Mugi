@@ -230,6 +230,7 @@ test('the TopBar control center keeps ordinary device actions in one dialog', as
   await expect(topbar.getByRole('button', { name: '控制中心', exact: true })).toHaveCount(1)
   await expect(topbar.getByRole('button', { name: /^(音量控制|屏幕操作)$/ })).toHaveCount(0)
   const { trigger, panel } = await openControlCenter(page)
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCount(0)
   await expect(panel.getByRole('heading', { name: '控制中心', exact: true })).toBeFocused()
   await expect(panel.getByRole('button', { name: '熄灭屏幕', exact: true })).toBeDisabled()
   await expect(panel.getByRole('button', { name: /^(关闭控制中心|关闭|切换静音)$/ })).toHaveCount(0)
