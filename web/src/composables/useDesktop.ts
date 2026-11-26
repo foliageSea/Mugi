@@ -42,7 +42,6 @@ export function useDesktop() {
   const appManagerOpen = ref(false)
   const connectOpen = ref(false)
   const filesOpen = ref(false)
-  const newWindowOpen = ref(false)
   const starting = ref(false)
   const unlockOpen = ref(false)
   const unlockMessage = ref('等待手机解锁…')
@@ -307,7 +306,6 @@ export function useDesktop() {
     launchingIcon = app?.iconUrl
     starting.value = true
     launcherOpen.value = false
-    newWindowOpen.value = false
     const { maxSize, maxFps, bitRateMbps } = castSettings.value
     const opts: SessionOptions = {
       bitRate: bitRateMbps * 1_000_000,
@@ -491,7 +489,6 @@ export function useDesktop() {
     launcherOpen,
     connectOpen,
     filesOpen,
-    newWindowOpen,
     starting,
     unlockOpen,
     unlockMessage,
@@ -504,7 +501,6 @@ export function useDesktop() {
     switchingTransport,
     loadApps,
     cancelStart,
-    startWindow,
     mirror,
     launch,
     removeWindow,

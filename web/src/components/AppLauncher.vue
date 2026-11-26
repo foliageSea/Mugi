@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Search, RefreshCw, Monitor, Plus, FolderOpen, ArrowRight } from '@lucide/vue'
+import { Search, RefreshCw, Monitor, FolderOpen, ArrowRight } from '@lucide/vue'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,7 +24,6 @@ const emit = defineEmits<{
   refresh: []
   connect: []
   files: []
-  create: []
 }>()
 const query = ref('')
 const filtered = computed(() =>
@@ -137,10 +136,6 @@ function keyboard(event: KeyboardEvent) {
         >
           <Monitor data-icon="inline-start" />
           镜像屏幕
-        </Button>
-        <Button variant="ghost" size="sm" :disabled="!connected" @click="emit('create')">
-          <Plus data-icon="inline-start" />
-          新窗口
         </Button>
         <Button
           variant="ghost"

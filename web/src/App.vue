@@ -31,7 +31,6 @@ import AppLauncher from '@/components/AppLauncher.vue'
 import DeviceDialog from '@/components/DeviceDialog.vue'
 import FileManagerDialog from '@/components/FileManagerDialog.vue'
 import InstallAppWindow from '@/components/InstallAppWindow.vue'
-import NewWindowDialog from '@/components/NewWindowDialog.vue'
 import MirrorWindow from '@/components/MirrorWindow.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
 import WallpaperDialog from '@/components/WallpaperDialog.vue'
@@ -71,14 +70,12 @@ const {
   launcherOpen,
   connectOpen,
   filesOpen,
-  newWindowOpen,
   starting,
   unlockOpen,
   unlockMessage,
   refreshDevices,
   loadApps,
   cancelStart,
-  startWindow,
   mirror,
   launch,
   removeWindow,
@@ -286,10 +283,6 @@ const {
   replace: replaceWallpaper,
   reset: resetWallpaper,
 } = useWallpaper()
-function openNewWindow() {
-  launcherOpen.value = false
-  newWindowOpen.value = true
-}
 function openFiles() {
   if (!supportsFiles.value) return
   launcherOpen.value = false
@@ -381,7 +374,6 @@ function shortcut(event: KeyboardEvent) {
   if (
     unlockOpen.value ||
     connectOpen.value ||
-    newWindowOpen.value ||
     shortcutsOpen.value ||
     wallpaperOpen.value ||
     settingsOpen.value
@@ -778,7 +770,6 @@ onBeforeUnmount(() => {
       @mirror="mirror"
       @refresh="loadApps"
       @connect="openDevice"
-      @create="openNewWindow"
       @files="openFiles"
     />
     <DeviceDialog
@@ -802,7 +793,6 @@ onBeforeUnmount(() => {
       @cancel-usb="cancelUsb"
       @disconnect-usb="disconnectWebUsb"
     />
-    <NewWindowDialog v-model:open="newWindowOpen" :apps="apps" @create="startWindow" />
     <SettingsDialog v-model:open="settingsOpen" />
     <WallpaperDialog
       v-model:open="wallpaperOpen"

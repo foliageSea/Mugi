@@ -989,75 +989,21 @@ test('resetting casting parameters restores persisted ADB defaults', async ({ pa
   expect(state.starts[1].opts).not.toHaveProperty('maxSize')
 })
 
-test('new window audio resets to the global default without saving the override', async ({
-  page,
-}) => {
-  const state = await backend(page)
-  const launcher = page.getByRole('button', { name: '打开应用启动器', exact: true })
-  const newWindow = page.getByRole('button', { name: '新窗口', exact: true })
-  const dialog = page.getByRole('dialog', { name: '新建窗口', exact: true })
-  const windowAudio = dialog.getByRole('switch', { name: '转发设备音频', exact: true })
-  const cancel = dialog.getByRole('button', { name: '取消', exact: true })
-  const settingsButton = page.getByRole('button', { name: '设置', exact: true })
-  const settings = page.getByRole('dialog', { name: '设置', exact: true })
-  const defaultAudio = settings.getByRole('switch', { name: '默认转发设备音频', exact: true })
-
-  await launcher.click()
-  await newWindow.click()
-  await expect(windowAudio).toHaveAttribute('aria-checked', 'true')
-  await cancel.click()
-  await expect(dialog).toBeHidden()
-
-  await settingsButton.click()
-  await defaultAudio.click()
-  await settings.getByRole('button', { name: '关闭', exact: true }).click()
-  await expect(settings).toBeHidden()
-
-  await launcher.click()
-  await newWindow.click()
-  await expect(windowAudio).toHaveAttribute('aria-checked', 'false')
-  await windowAudio.click()
-  await dialog.getByRole('button', { name: '创建窗口', exact: true }).click()
-  await expect(page.locator('.mirror-window')).toHaveCount(1)
-  expect(state.starts[0].opts).toMatchObject({ mode: 'display', audio: true })
-
-  await launcher.click()
-  await newWindow.click()
-  await expect(windowAudio).toHaveAttribute('aria-checked', 'false')
-  await cancel.click()
-  await expect(dialog).toBeHidden()
-  await settingsButton.click()
-  await expect(defaultAudio).toHaveAttribute('aria-checked', 'false')
-})
-
-test('new window form uses accessible custom controls', async ({ page }) => {
-  const state = await backend(page)
-  await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()
-  await page.getByRole('button', { name: '新窗口', exact: true }).click()
-
-  const dialog = page.getByRole('dialog')
-  await expect(dialog.getByRole('heading', { name: '新建窗口' })).toBeVisible()
-  await expect(dialog.locator('select, input[type="checkbox"]')).toHaveCount(0)
-
-  await dialog.getByRole('combobox', { name: '启动应用' }).click()
-  await page.getByRole('option', { name: '照片' }).click()
-  await expect(dialog.getByRole('combobox', { name: '启动应用' })).toContainText('照片')
-
-  const audio = dialog.getByRole('switch', { name: '转发设备音频' })
-  await expect(audio).toHaveAttribute('aria-checked', 'true')
-  await audio.click()
-  await expect(audio).toHaveAttribute('aria-checked', 'false')
-  await dialog.getByRole('button', { name: '创建窗口', exact: true }).click()
-  await expect(page.locator('.mirror-window')).toHaveCount(1)
-  expect(state.starts[0].opts).toMatchObject({
-    mode: 'display',
-    width: 900,
-    height: 1600,
-    dpi: 280,
-    audio: false,
+for (const width of [1200, 390]) {
+  test(`launcher footer keeps only mirror and files at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await backend(page)
+    await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()
+    const launcher = page.getByRole('dialog', { name: '应用启动器' })
+    const actions = launcher.locator('.launcher-footer').getByRole('button')
+    await expect(actions).toHaveText(['镜像屏幕', '文件管理器'])
+    for (const action of await actions.all()) {
+      await expect(action).toBeEnabled()
+      await expect(action).toBeInViewport({ ratio: 1 })
+    }
+    await expect(launcher.getByRole('button', { name: '打开 照片', exact: true })).toBeVisible()
   })
-  expect(state.starts[0].opts.flex).toBeFalsy()
-})
+}
 
 for (const mode of ['mirror', 'display']) {
   test(`${mode} audio can be disabled and re-enabled without replacing the desktop window`, async ({
