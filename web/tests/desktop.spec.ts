@@ -846,6 +846,111 @@ test('default audio forwarding persists and applies to new mirror and app sessio
   })
 })
 
+function castingSettings(page: Page) {
+  const dialog = page.getByRole('dialog', { name: '设置', exact: true })
+  return {
+    open: page.getByRole('button', { name: '设置', exact: true }),
+    close: dialog.getByRole('button', { name: '关闭', exact: true }),
+    reset: dialog.getByRole('button', { name: '恢复默认', exact: true }),
+    maxSize: dialog.getByRole('combobox', { name: '镜像最大长边', exact: true }),
+    maxFps: dialog.getByRole('combobox', { name: '最高帧率', exact: true }),
+    bitRate: dialog.getByRole('combobox', { name: '视频码率', exact: true }),
+    async choose(trigger: Locator, name: string) {
+      await trigger.click()
+      await page.getByRole('option', { name, exact: true }).click()
+    },
+    dialog,
+  }
+}
+
+test('casting parameters persist across reload and apply to new ADB sessions', async ({ page }) => {
+  const state = await backend(page)
+  const settings = castingSettings(page)
+  await settings.open.click()
+  await expect(settings.dialog.getByRole('heading', { name: '投屏参数', exact: true })).toBeVisible()
+  await settings.choose(settings.maxSize, '1080 px')
+  await settings.choose(settings.maxFps, '60 fps')
+  await settings.choose(settings.bitRate, '12 Mbps')
+
+  await page.reload()
+  await settings.open.click()
+  await expect(settings.maxSize).toHaveText('1080 px')
+  await expect(settings.maxFps).toHaveText('60 fps')
+  await expect(settings.bitRate).toHaveText('12 Mbps')
+  await settings.close.click()
+  await expect(settings.dialog).toBeHidden()
+
+  await page.getByRole('button', { name: '镜像屏幕', exact: true }).click()
+  const windows = page.locator('.mirror-window')
+  await expect(windows).toHaveCount(1)
+  expect(state.starts[0].opts).toMatchObject({
+    mode: 'mirror',
+    width: 720,
+    height: 1600,
+    maxSize: 1080,
+    maxFps: 60,
+    bitRate: 12_000_000,
+  })
+
+  await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()
+  await page.getByRole('button', { name: '打开 照片', exact: true }).click()
+  await expect(windows).toHaveCount(2)
+  expect(state.starts[1].opts).toMatchObject({
+    mode: 'display',
+    startApp: 'com.example.photos',
+    width: 720,
+    height: 1600,
+    dpi: 280,
+    maxFps: 60,
+    bitRate: 12_000_000,
+  })
+  expect(state.starts[1].opts).not.toHaveProperty('maxSize')
+})
+
+test('resetting casting parameters restores persisted ADB defaults', async ({ page }) => {
+  const state = await backend(page)
+  const settings = castingSettings(page)
+  await settings.open.click()
+  await settings.choose(settings.maxSize, '720 px')
+  await settings.choose(settings.maxFps, '30 fps')
+  await settings.choose(settings.bitRate, '4 Mbps')
+  await settings.reset.click()
+  await expect(settings.maxSize).toHaveText('自动')
+  await expect(settings.maxFps).toHaveText('不限')
+  await expect(settings.bitRate).toHaveText('8 Mbps')
+
+  await page.reload()
+  await settings.open.click()
+  await expect(settings.maxSize).toHaveText('自动')
+  await expect(settings.maxFps).toHaveText('不限')
+  await expect(settings.bitRate).toHaveText('8 Mbps')
+  await settings.close.click()
+  await expect(settings.dialog).toBeHidden()
+
+  const windows = page.locator('.mirror-window')
+  await page.getByRole('button', { name: '镜像屏幕', exact: true }).click()
+  await expect(windows).toHaveCount(1)
+  // The automatic mode still uses the display-dependent mirror cap.
+  const autoMaxSize = await page.evaluate(() => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const target = Math.round(((window.screen?.availHeight || 1080) * dpr) / 16) * 16
+    return Math.max(1280, Math.min(2560, target))
+  })
+  expect(state.starts[0].opts).toMatchObject({
+    mode: 'mirror',
+    maxSize: autoMaxSize,
+    bitRate: 8_000_000,
+  })
+  expect(state.starts[0].opts).not.toHaveProperty('maxFps')
+
+  await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()
+  await page.getByRole('button', { name: '打开 照片', exact: true }).click()
+  await expect(windows).toHaveCount(2)
+  expect(state.starts[1].opts).toMatchObject({ mode: 'display', bitRate: 8_000_000 })
+  expect(state.starts[1].opts).not.toHaveProperty('maxFps')
+  expect(state.starts[1].opts).not.toHaveProperty('maxSize')
+})
+
 test('new window audio resets to the global default without saving the override', async ({
   page,
 }) => {
@@ -921,6 +1026,14 @@ for (const mode of ['mirror', 'display']) {
     page,
   }) => {
     const state = await backend(page)
+    const settings = castingSettings(page)
+    await settings.open.click()
+    await settings.choose(settings.maxSize, '1080 px')
+    await settings.choose(settings.maxFps, '60 fps')
+    await settings.choose(settings.bitRate, '12 Mbps')
+    await settings.close.click()
+    await expect(settings.dialog).toBeHidden()
+
     if (mode === 'display') {
       await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()
       await page.getByRole('button', { name: '打开 照片', exact: true }).click()
@@ -928,23 +1041,46 @@ for (const mode of ['mirror', 'display']) {
       await page.getByRole('button', { name: '镜像屏幕', exact: true }).click()
     }
     const mirror = page.locator('.mirror-window')
-    const more = mirror.getByRole('button', { name: '更多操作' })
-    await more.click()
-    await expect(page.getByRole('menuitem', { name: '关闭音频转发' })).toBeEnabled()
+    await expect(mirror).toHaveAttribute('data-session-id', 's-1')
     await expect(mirror).not.toHaveClass(/window-motion-enter-active/)
     const bounds = await mirror.boundingBox()
     const id = await mirror.getAttribute('data-window-id')
     await mirror.evaluate((element) => element.setAttribute('data-test-retained', 'true'))
-    await page.getByRole('menuitem', { name: '关闭音频转发' }).click()
+    const initialOptions = state.starts[0].opts
+    expect(initialOptions).toMatchObject({
+      mode,
+      audio: true,
+      maxFps: 60,
+      bitRate: 12_000_000,
+      ...(mode === 'mirror' ? { maxSize: 1080 } : {}),
+    })
+
+    await settings.open.click()
+    await settings.choose(settings.maxSize, '1440 px')
+    await settings.choose(settings.maxFps, '90 fps')
+    await settings.choose(settings.bitRate, '16 Mbps')
+    await settings.close.click()
+    await expect(settings.dialog).toBeHidden()
+    await expect(mirror).toHaveAttribute('data-session-id', 's-1')
+    await expect(mirror).toHaveAttribute('data-test-retained', 'true')
+    expect(await mirror.boundingBox()).toEqual(bounds)
+
+    const more = mirror.getByRole('button', { name: '更多操作' })
+    await more.click()
+    const turnAudioOff = page.getByRole('menuitem', { name: '关闭音频转发' })
+    await expect(turnAudioOff).toBeEnabled()
+    expect(state.starts).toHaveLength(1)
+    expect(state.stops).toEqual([])
+    await turnAudioOff.click()
     await more.click()
     await expect(page.getByRole('menuitem', { name: '开启音频转发' })).toBeEnabled()
-    expect(state.starts[1].opts).toMatchObject({ mode, audio: false })
+    expect(state.starts[1].opts).toEqual({ ...initialOptions, audio: false })
     expect(state.stops).toEqual(['s-1'])
     await page.getByRole('menuitem', { name: '开启音频转发' }).click()
     await more.click()
     await expect(page.getByRole('menuitem', { name: '关闭音频转发' })).toBeEnabled()
     await page.keyboard.press('Escape')
-    expect(state.starts[2].opts).toMatchObject({ mode, audio: true })
+    expect(state.starts[2].opts).toEqual(initialOptions)
     if (mode === 'display') {
       expect(state.starts[2].opts.startApp).toBe('com.example.photos')
       for (const start of state.starts)

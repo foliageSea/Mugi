@@ -650,16 +650,15 @@ export class WebUsbConnection {
     signal: AbortSignal,
   ): Promise<WebUsbScrcpyChannels> {
     if (this.closed) throw new Error('WebUSB 设备已断开')
-    await abortable(this.ensureServer(), signal)
-    signal?.throwIfAborted()
     const scid = (crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff)
       .toString(16)
       .padStart(8, '0')
+    const command = serverCommand(opts, scid)
+    await abortable(this.ensureServer(), signal)
+    signal?.throwIfAborted()
     if (!this.adb.subprocess.shellProtocol) throw new Error('当前设备不支持 ADB Shell v2')
-    const process = await abortable(
-      this.adb.subprocess.shellProtocol.spawn(serverCommand(opts, scid)),
-      signal,
-      (p) => p.kill(),
+    const process = await abortable(this.adb.subprocess.shellProtocol.spawn(command), signal, (p) =>
+      p.kill(),
     )
     let log = '',
       exited = false

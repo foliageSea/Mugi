@@ -76,6 +76,10 @@ export function isUnlocked(power: string, window: string) {
 }
 
 export function serverCommand(opts: SessionOptions, scid: string) {
+  const { maxFps = 0 } = opts
+  if (!Number.isInteger(maxFps) || maxFps < 0 || maxFps > 120) {
+    throw new RangeError('maxFps 必须是 0 到 120 之间的整数')
+  }
   const args = [
     `CLASSPATH=${SERVER_PATH}`,
     'app_process',
@@ -96,6 +100,7 @@ export function serverCommand(opts: SessionOptions, scid: string) {
   ]
   if (opts.audio) args.push('audio_codec=opus')
   if (opts.maxSize) args.push(`max_size=${opts.maxSize}`)
+  if (maxFps > 0) args.push(`max_fps=${maxFps}`)
   if (opts.mode === 'display') {
     const size = opts.width && opts.height ? `${opts.width}x${opts.height}` : ''
     args.push(

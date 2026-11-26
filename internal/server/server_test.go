@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -386,6 +387,52 @@ func TestStartSessionRejectsInvalidOptions(t *testing.T) {
 	router.ServeHTTP(res, req)
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("status %d, body %s", res.Code, res.Body.String())
+	}
+}
+
+func TestStartSessionMaxFps(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		name, body, wantFps string
+		wantStatus          int
+	}{
+		{"omitted", `{}`, "", http.StatusOK},
+		{"unlimited", `{"maxFps":0}`, "", http.StatusOK},
+		{"minimum", `{"maxFps":1}`, "1", http.StatusOK},
+		{"maximum", `{"maxFps":120}`, "120", http.StatusOK},
+		{"negative", `{"maxFps":-1}`, "", http.StatusBadRequest},
+		{"above maximum", `{"maxFps":121}`, "", http.StatusBadRequest},
+		{"fraction", `{"maxFps":29.5}`, "", http.StatusBadRequest},
+		{"string", `{"maxFps":"30"}`, "", http.StatusBadRequest},
+		{"null", `{"maxFps":null}`, "", http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := &recordingSessionBackend{}
+			router := New(backend, scrcpy.NewManager()).Router(http.FS(fstest.MapFS{
+				"index.html": &fstest.MapFile{Data: []byte("ok")},
+			}))
+			req := localRequest(http.MethodPost, "/api/devices/test/sessions", strings.NewReader(tc.body))
+			res := httptest.NewRecorder()
+			router.ServeHTTP(res, req)
+			if res.Code != tc.wantStatus {
+				t.Fatalf("status %d, want %d; body %s", res.Code, tc.wantStatus, res.Body)
+			}
+			if tc.wantStatus != http.StatusOK {
+				if backend.started != 0 {
+					t.Fatal("backend started a session with invalid maxFps")
+				}
+				return
+			}
+			var session struct {
+				Opts map[string]json.RawMessage `json:"opts"`
+			}
+			if err := json.Unmarshal(res.Body.Bytes(), &session); err != nil {
+				t.Fatal(err)
+			}
+			if got := string(session.Opts["maxFps"]); got != tc.wantFps {
+				t.Errorf("response maxFps = %q, want %q (empty means omitted)", got, tc.wantFps)
+			}
+		})
 	}
 }
 

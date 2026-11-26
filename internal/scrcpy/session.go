@@ -41,6 +41,7 @@ type SessionOptions struct {
 	DPI         int    `json:"dpi"`
 	StartApp    string `json:"startApp"`
 	MaxSize     int    `json:"maxSize"`
+	MaxFps      int    `json:"maxFps,omitempty"` // 0 leaves the frame rate uncapped
 	BitRate     int    `json:"bitRate"`
 	Audio       bool   `json:"audio"`
 	Flex        bool   `json:"flex"`
@@ -415,24 +416,7 @@ func (b *AdbBackend) StartSession(serial string, opts SessionOptions) (*Session,
 	return b.startSession(serial, opts)
 }
 
-func (b *AdbBackend) startSession(serial string, opts SessionOptions) (*Session, error) {
-	if opts.Mode == "" {
-		opts.Mode = "mirror"
-	}
-	if opts.BitRate <= 0 {
-		opts.BitRate = 8000000
-	}
-
-	scid := rand.Int31()
-	scidHex := fmt.Sprintf("%08x", scid)
-	socketName := "scrcpy_" + scidHex
-
-	// Set up the forward tunnel with an auto-assigned local port.
-	port, err := b.Adb.ForwardTCP(serial, "localabstract:"+socketName)
-	if err != nil {
-		return nil, err
-	}
-
+func sessionShellCommand(scidHex string, opts SessionOptions) string {
 	args := []string{
 		"scid=" + scidHex,
 		"tunnel_forward=true",
@@ -447,6 +431,9 @@ func (b *AdbBackend) startSession(serial string, opts SessionOptions) (*Session,
 	}
 	if opts.MaxSize > 0 {
 		args = append(args, fmt.Sprintf("max_size=%d", opts.MaxSize))
+	}
+	if opts.MaxFps > 0 {
+		args = append(args, fmt.Sprintf("max_fps=%d", opts.MaxFps))
 	}
 	if opts.Audio {
 		args = append(args, "audio=true", "audio_codec=opus")
@@ -470,8 +457,30 @@ func (b *AdbBackend) startSession(serial string, opts SessionOptions) (*Session,
 		}
 	}
 
-	shellCmdline := "CLASSPATH=" + remoteServerPath + " app_process / com.genymobile.scrcpy.Server " +
+	return "CLASSPATH=" + remoteServerPath + " app_process / com.genymobile.scrcpy.Server " +
 		ServerVersion + " " + strings.Join(args, " ")
+}
+
+func (b *AdbBackend) startSession(serial string, opts SessionOptions) (*Session, error) {
+	if opts.Mode == "" {
+		opts.Mode = "mirror"
+	}
+	if opts.BitRate <= 0 {
+		opts.BitRate = 8000000
+	}
+
+	scid := rand.Int31()
+	scidHex := fmt.Sprintf("%08x", scid)
+	socketName := "scrcpy_" + scidHex
+
+	// Set up the forward tunnel with an auto-assigned local port.
+	port, err := b.Adb.ForwardTCP(serial, "localabstract:"+socketName)
+	if err != nil {
+		return nil, err
+	}
+
+	shellCmdline := sessionShellCommand(scidHex, opts)
+
 	log.Printf("[session] %s: %s", serial, shellCmdline)
 
 	shell := hostexec.Command(b.Adb.Bin, "-s", serial, "shell", shellCmdline)

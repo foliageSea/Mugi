@@ -20,6 +20,8 @@ export interface SessionOptions {
   dpi?: number
   startApp?: string
   maxSize?: number
+  /** Frame rate limit (integer 0–120); omitted or 0 means unlimited. */
+  maxFps?: number
   bitRate?: number
   audio?: boolean
   flex?: boolean

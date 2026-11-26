@@ -79,7 +79,7 @@ import { WebUsbSession } from '@mugi/web-adb/scrcpy'
 
 const session = new WebUsbSession(connection, {
   id: crypto.randomUUID(),
-  opts: { mode: 'mirror', maxSize: 1600, audio: true },
+  opts: { mode: 'mirror', maxSize: 1600, maxFps: 30, audio: true },
 }, canvas, {
   onError: console.error,
   onClipboard: (text) => console.log(text),
@@ -89,6 +89,7 @@ session.start()
 ```
 
 `mode: 'display'` 可创建虚拟显示器，支持 width、height、dpi、startApp 等选项。
+两种模式均支持 `maxFps`（0–120 的整数）；省略或设为 `0` 时不限帧率。
 scrcpy 子入口还提供 `ControlEncoder`、`StreamParser`、`VideoPlayer`、`AudioPlayer` 和输入处理，
 可供其他传输方式复用。仅导入主入口不会加载这些播放和输入模块。
 

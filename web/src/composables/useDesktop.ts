@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { useAudioForwarding } from '@/composables/useAudioForwarding'
+import { useCastSettings } from '@/composables/useCastSettings'
 import { api, ApiError, errorText } from '@/services/api'
 import { readCachedAppIcon, writeCachedAppIcon } from '@/services/appIconCache'
 import { displaySizeForDevice } from '@/lib/scrcpy/window-geometry.js'
@@ -24,6 +25,7 @@ function pause(signal: AbortSignal) {
 }
 export function useDesktop() {
   const { audioForwarding } = useAudioForwarding()
+  const { castSettings } = useCastSettings()
   const devices = ref<Device[]>([])
   const serial = ref('')
   const allApps = shallowRef<AndroidApp[]>([])
@@ -311,8 +313,11 @@ export function useDesktop() {
     starting.value = true
     launcherOpen.value = false
     newWindowOpen.value = false
-    const opts = {
-      bitRate: 8000000,
+    const { maxSize, maxFps, bitRateMbps } = castSettings.value
+    const opts: SessionOptions = {
+      bitRate: bitRateMbps * 1_000_000,
+      ...(maxFps ? { maxFps } : {}),
+      ...(options.mode === 'mirror' ? { maxSize: maxSize || mirrorMaxSize() } : {}),
       audio:
         audioForwarding.value &&
         !windows.value.some((w) => w.info.serial === target && w.info.audioCodec),
@@ -381,7 +386,7 @@ export function useDesktop() {
   }
   const mirror = () => {
     const size = displaySizeForDevice(device.value?.width, device.value?.height)
-    return startWindow({ mode: 'mirror', ...size, maxSize: mirrorMaxSize() })
+    return startWindow({ mode: 'mirror', ...size })
   }
   const launch = (app: AndroidApp) => {
     const size = displaySizeForDevice(device.value?.width, device.value?.height)

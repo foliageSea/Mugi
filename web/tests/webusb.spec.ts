@@ -997,6 +997,52 @@ test('USB multiwindow shares one audio stream and cleans up failed startup', asy
   expect(requests).toEqual([])
 })
 
+test('USB mirror and app scrcpy commands use the selected cast settings', async ({ page }) => {
+  const requests = await usbPage(page)
+  await page.getByRole('button', { name: '设置', exact: true }).click()
+  const settings = page.getByRole('dialog', { name: '设置', exact: true })
+  await settings.getByRole('combobox', { name: '镜像最大长边', exact: true }).click()
+  await page.getByRole('option', { name: '1080 px', exact: true }).click()
+  await settings.getByRole('combobox', { name: '最高帧率', exact: true }).click()
+  await page.getByRole('option', { name: '30 fps', exact: true }).click()
+  await settings.getByRole('combobox', { name: '视频码率', exact: true }).click()
+  await page.getByRole('option', { name: '4 Mbps', exact: true }).click()
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('mugi.cast-settings') ?? 'null')),
+    )
+    .toEqual({ maxSize: 1080, maxFps: 30, bitRateMbps: 4 })
+  await settings.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(settings).toBeHidden()
+
+  const casts = () =>
+    page.evaluate(() =>
+      ((window as any).__usb.commands as string[])
+        .filter((command) => command.includes(' scid='))
+        .map((command) => command.split(' ')),
+    )
+  await page.getByRole('button', { name: '镜像屏幕', exact: true }).click()
+  await expect.poll(casts).toHaveLength(1)
+  await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()
+  await page.getByRole('button', { name: '打开 照片', exact: true }).click()
+  await expect.poll(casts).toHaveLength(2)
+
+  const [mirror, app] = await casts()
+  expect(mirror).toEqual(
+    expect.arrayContaining(['max_size=1080', 'max_fps=30', 'video_bit_rate=4000000']),
+  )
+  expect(mirror.some((arg) => arg.startsWith('new_display='))).toBe(false)
+  expect(app).toEqual(
+    expect.arrayContaining([
+      'max_fps=30',
+      'video_bit_rate=4000000',
+      expect.stringMatching(/^new_display=/),
+    ]),
+  )
+  expect(app.some((arg) => arg.startsWith('max_size='))).toBe(false)
+  expect(requests).toEqual([])
+})
+
 test('USB mirror and app windows can wake, turn off, and lock the device', async ({ page }) => {
   const requests = await usbPage(page)
   const keyCount = (keycode: number) =>

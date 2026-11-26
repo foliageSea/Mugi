@@ -2,6 +2,7 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -702,10 +704,22 @@ func (s *Server) pullFile(c *gin.Context) {
 
 func (s *Server) startSession(c *gin.Context) {
 	serial := c.Param("serial")
-	var opts scrcpy.SessionOptions
-	if err := c.ShouldBindJSON(&opts); err != nil {
+	var req struct {
+		scrcpy.SessionOptions
+		MaxFps json.RawMessage `json:"maxFps"` // Distinguish omission from explicit null.
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, err)
 		return
+	}
+	opts := req.SessionOptions
+	if req.MaxFps != nil {
+		fps, err := strconv.Atoi(string(req.MaxFps))
+		if err != nil {
+			fail(c, http.StatusBadRequest, errors.New("maxFps must be an integer between 0 and 120"))
+			return
+		}
+		opts.MaxFps = fps
 	}
 	if err := validateSessionOptions(&opts); err != nil {
 		fail(c, http.StatusBadRequest, err)
@@ -794,6 +808,9 @@ func validateSessionOptions(opts *scrcpy.SessionOptions) error {
 	}
 	if opts.MaxSize < 0 || opts.MaxSize > 4096 {
 		return errors.New("maxSize must be between 0 and 4096")
+	}
+	if opts.MaxFps < 0 || opts.MaxFps > 120 {
+		return errors.New("maxFps must be between 0 and 120")
 	}
 	if opts.BitRate != 0 && (opts.BitRate < 100000 || opts.BitRate > 50000000) {
 		return errors.New("bitRate must be between 100000 and 50000000")

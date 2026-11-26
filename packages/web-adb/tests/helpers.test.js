@@ -62,6 +62,26 @@ test('shell arguments, labels and unlock checks handle real device output', () =
   assert.equal(sha256Matches('sha256sum: not found', 'a'.repeat(64)), true)
 })
 
+test('scrcpy frame rate defaults to unlimited and is configurable in both cast modes', () => {
+  for (const mode of ['mirror', 'display']) {
+    const args = (options) =>
+      serverCommand({ mode, ...options }, '00000123')
+        .split(' ')
+        .filter((arg) => arg.startsWith('max_fps='))
+    assert.deepEqual(args({}), [])
+    assert.deepEqual(args({ maxFps: 0 }), [])
+    for (const maxFps of [1, 30, 120]) {
+      assert.deepEqual(args({ maxFps }), [`max_fps=${maxFps}`])
+    }
+  }
+})
+
+test('scrcpy rejects frame rates that are not integers in the supported range', () => {
+  for (const maxFps of [-1, 121, 29.5, NaN, Infinity, '30', null]) {
+    assert.throws(() => serverCommand({ mode: 'mirror', maxFps }, '00000123'), RangeError)
+  }
+})
+
 test('cancelled startup disposes resources that resolve after cancellation', async () => {
   const controller = new AbortController()
   let resolve
