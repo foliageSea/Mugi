@@ -1068,6 +1068,7 @@ async function focusTitle(event: Event) {
 }
 .control-center-more {
   border-top: 1px solid var(--cc-line);
+  padding-top: 8px;
 }
 .control-center-action svg,
 .control-center-more-trigger svg {
