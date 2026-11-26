@@ -35,10 +35,6 @@ export function useDockMagnification(
       })
       const expansion = sizes.reduce((total, item) => total + item.extra, 0)
       root!.style.setProperty('--dock-expansion', `${expansion}px`)
-      root!.style.setProperty(
-        '--dock-cross-expansion',
-        `${Math.max(0, ...sizes.map((item) => item.extra))}px`,
-      )
       let shift = -expansion / 2
       items.forEach((item, index) => {
         const { scale, extra } = sizes[index]!

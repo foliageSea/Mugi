@@ -1196,23 +1196,37 @@ test('all nine built-in Dock controls show decorative artwork', async ({ page })
   }
 })
 
-test('side Dock magnifies inward and resets after leaving', async ({ page }) => {
-  await backend(page)
-  const dock = page.locator('.desktop-actions')
-  const icon = dock.getByRole('button', { name: '性能监控', exact: true })
-  const next = dock.getByRole('button', { name: '终端', exact: true })
-  const before = (await icon.boundingBox())!
-  const nextBefore = (await next.boundingBox())!
-  await icon.hover()
-  await expect.poll(async () => (await icon.boundingBox())!.width).toBeGreaterThan(before.width * 1.4)
-  expect((await icon.boundingBox())!.x).toBeCloseTo(before.x, 0)
-  await expect.poll(async () => {
-    const box = (await next.boundingBox())!
-    return box.y + box.height / 2
-  }).toBeGreaterThan(nextBefore.y + nextBefore.height / 2)
-  await page.mouse.move(400, 80)
-  await expect.poll(() => icon.boundingBox()).toEqual(before)
-})
+for (const position of ['left', 'right'] as const) {
+  test(`${position} Dock magnifies inward without widening and resets after leaving`, async ({ page }) => {
+    await page.addInitScript((edge) => localStorage.setItem('mugi.dock-position', edge), position)
+    await backend(page)
+    const dock = page.locator('.desktop-actions')
+    const icon = dock.getByRole('button', { name: '性能监控', exact: true })
+    const next = dock.getByRole('button', { name: '终端', exact: true })
+    const background = () =>
+      dock.evaluate((el) => {
+        const style = getComputedStyle(el, '::before')
+        return { left: style.left, right: style.right }
+      })
+    const before = (await icon.boundingBox())!
+    const nextBefore = (await next.boundingBox())!
+    const dockBefore = (await dock.boundingBox())!
+    const backgroundBefore = await background()
+    await icon.hover()
+    await expect.poll(async () => (await icon.boundingBox())!.width).toBeGreaterThan(before.width * 1.4)
+    const enlarged = (await icon.boundingBox())!
+    if (position === 'left') expect(enlarged.x).toBeCloseTo(before.x, 0)
+    else expect(enlarged.x + enlarged.width).toBeCloseTo(before.x + before.width, 0)
+    expect(await dock.boundingBox()).toEqual(dockBefore)
+    expect(await background()).toEqual(backgroundBefore)
+    await expect.poll(async () => {
+      const box = (await next.boundingBox())!
+      return box.y + box.height / 2
+    }).toBeGreaterThan(nextBefore.y + nextBefore.height / 2)
+    await page.mouse.move(400, 80)
+    await expect.poll(() => icon.boundingBox()).toEqual(before)
+  })
+}
 
 test('Dock shows a tooltip on hover and keyboard focus', async ({ page }) => {
   await backend(page)
