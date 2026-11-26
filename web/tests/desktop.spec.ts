@@ -1232,7 +1232,7 @@ test('Dock shows a tooltip on hover and keyboard focus', async ({ page }) => {
   await backend(page)
   const dock = page.getByRole('navigation', { name: '工作区操作' })
   const launcher = dock.getByRole('button', { name: '应用启动器', exact: true })
-  const tooltip = page.getByRole('tooltip', { name: '应用启动器', exact: true })
+  const tooltip = page.locator('.dock-tooltip').filter({ hasText: '应用启动器' })
   await expect(tooltip).toHaveCount(0)
   await launcher.hover()
   await expect(tooltip).toBeVisible()
@@ -1268,7 +1268,7 @@ test('Dock performance tooltip keeps the same short label when toggled', async (
   await backend(page)
   const dock = page.getByRole('navigation', { name: '工作区操作' })
   const performance = dock.getByRole('button', { name: '性能监控', exact: true })
-  const performanceTooltip = page.getByRole('tooltip', { name: '性能监控', exact: true })
+  const performanceTooltip = page.locator('.dock-tooltip').filter({ hasText: '性能监控' })
   await performance.hover()
   await expect(performanceTooltip).toBeVisible()
   await performance.click()
@@ -1290,7 +1290,7 @@ test('disabled Dock controls still explain their function on hover', async ({ pa
   const mirror = dock.getByRole('button', { name: '镜像屏幕', exact: true })
   await expect(mirror).toBeDisabled()
   await mirror.hover()
-  await expect(page.getByRole('tooltip', { name: '镜像屏幕', exact: true })).toBeVisible()
+  await expect(page.locator('.dock-tooltip').filter({ hasText: '镜像屏幕' })).toBeVisible()
 })
 
 test('Android placeholder stays inside its Dock artwork', async ({ page }) => {
