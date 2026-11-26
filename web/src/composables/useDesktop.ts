@@ -24,6 +24,9 @@ function pause(signal: AbortSignal) {
     if (signal.aborted) abort()
   })
 }
+
+const webUsbOnly = import.meta.env.VITE_WEBUSB_ONLY === 'true'
+
 export function useDesktop() {
   const { audioForwarding } = useAudioForwarding()
   const { castSettings } = useCastSettings()
@@ -47,6 +50,7 @@ export function useDesktop() {
   const unlockMessage = ref('等待手机解锁…')
   const webUsb = shallowRef<WebUsbConnection>()
   const initialTransport = (() => {
+    if (webUsbOnly) return 'webusb'
     const query = new URLSearchParams(location.search).get('transport')
     if (query === 'webusb' || query === 'adb') return query
     try {
@@ -243,6 +247,7 @@ export function useDesktop() {
     }
   }
   async function loadCapabilities() {
+    if (webUsbOnly) return
     try {
       const result = await api.capabilities()
       network.value = result.adbAllowed === true ? 'local' : 'external'

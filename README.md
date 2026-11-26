@@ -10,6 +10,7 @@
 </p>
 <p align="center">开源 Android 工作台 · 屏幕镜像、多窗口投屏、文件与设备管理</p>
 <p align="center">
+  <a href="https://foliagesea.github.io/Mugi/">在线网页版</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="#桌面版">桌面版</a> ·
   <a href="#docker-部署">Docker 部署</a> ·
@@ -48,6 +49,10 @@ go run ./cmd/mugi
 要断开无线 ADB 设备，在「USB / 已连接」列表中点击该设备旁的「断开」，离线条目也可以移除。如果该设备正在投屏，请先关闭它的投屏窗口。断开有线 ADB 设备请拔掉 USB 数据线。
 
 ### WebUSB 直连
+
+用桌面版 Chrome / Edge 打开 [Mugi 在线网页版](https://foliagesea.github.io/Mugi/)，将开启了 USB 调试的手机连接到电脑，然后在右上角设备面板点击「选择 USB 设备」。在线版只支持 WebUSB，不需要安装 ADB，也不支持无线调试。
+
+也可以在本地运行 WebUSB 版：
 
 ```bash
 npm ci
@@ -244,6 +249,10 @@ git push origin HEAD
 `--prepare` 同步应用版本以及 npm 锁文件与 Windows 清单中的版本，不提交、不推送；macOS 构建读取应用版本的数字部分。`@mugi/web-adb` SDK 独立维护版本。发版脚本默认生成发行说明，可用 `--notes` 或 `--notes-file` 覆盖；`v0.2.0-rc.1` 形式会发布为预发行版。发版需使用有仓库写权限的 GitHub 凭据；Actions 自动生成的 `GITHUB_TOKEN` 不会触发后续 Release 工作流。
 
 [发布工作流](.github/workflows/release.yml) 在发布 Release 后检出对应标签，将带版本号的 Windows `amd64`、macOS `arm64`、Linux 双架构 Web 服务和 WebUSB 静态站点构建产物及 SHA-256 校验文件上传到同一 Release，并把同名版本标签的多架构镜像推到 `ghcr.io/foliagesea/mugi`。仅推 Git 标签不会触发。仓库需关闭 Release 不可变设置，否则工作流无法向已发布的 Release 追加附件。首次发布后如需匿名拉取，请在 GitHub Packages 的包设置中将镜像设为公开。
+
+### GitHub Pages
+
+在仓库 **Settings → Pages → Source** 中选择 **GitHub Actions** 后，[Pages 工作流](.github/workflows/pages.yml)会在每次推送到 `main` 时构建并部署 WebUSB 版，也可以在 Actions 中手动运行。它使用 Pages 提供的站点路径构建静态资源，不影响桌面版和 Go 服务的发版。
 
 ## 许可证
 
