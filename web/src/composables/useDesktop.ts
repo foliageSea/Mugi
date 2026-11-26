@@ -2,7 +2,8 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { useAudioForwarding } from '@/composables/useAudioForwarding'
 import { useCastSettings } from '@/composables/useCastSettings'
-import { api, ApiError, errorText } from '@/services/api'
+import { api, errorText } from '@/services/api'
+import { isDeviceLockedError, startCastSession, stopCastSession } from '@/services/castSessions'
 import { readCachedAppIcon, writeCachedAppIcon } from '@/services/appIconCache'
 import { displaySizeForDevice } from '@/lib/scrcpy/window-geometry.js'
 import { setActiveWebUsbConnection } from '@/services/webusb'
@@ -198,10 +199,7 @@ export function useDesktop() {
     appRequest = request
     loadingApps.value = true
     try {
-      const all =
-        mode === 'webusb' && connection
-          ? await connection.apps(request.signal)
-          : (await api.apps(target)).apps || []
+      const all = await api.apps(target, request.signal)
       if (!current()) return
       allApps.value = all.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans'))
       void hydrateIcons()
@@ -270,10 +268,7 @@ export function useDesktop() {
   async function awaitUnlock(target: string, signal: AbortSignal) {
     for (;;) {
       signal.throwIfAborted()
-      const status =
-        webUsb.value?.serial === target
-          ? { unlocked: await webUsb.value.unlocked(signal) }
-          : await api.unlockStatus(target, signal)
+      const status = await api.unlockStatus(target, signal)
       signal.throwIfAborted()
       if (status.unlocked) {
         unlockOpen.value = false
@@ -324,41 +319,21 @@ export function useDesktop() {
       ...options,
     }
     try {
-      if (transport.value === 'webusb' && webUsb.value) {
-        const connection = webUsb.value
-        await awaitUnlock(target, controller.signal)
-        if (controller.signal.aborted || disposed || connection !== webUsb.value) return
-        const info = {
-          id: `webusb-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          serial: target,
-          opts,
-          deviceName: connection.model,
-          videoCodec: 'h264',
-          audioCodec: opts.audio ? 'opus' : undefined,
-          transport: 'webusb' as const,
-        }
-        if (controller.signal.aborted || disposed) return
-        windows.value = [...windows.value, { id: info.id, info, app }]
-        return
-      }
       for (;;) {
         await awaitUnlock(target, controller.signal)
-        let info
+        controller.signal.throwIfAborted()
+        let info: SessionInfo
         try {
-          info = await api.startSession(target, opts)
+          info = await startCastSession(target, opts)
         } catch (error) {
-          if (
-            !(error instanceof ApiError) ||
-            error.status !== 409 ||
-            error.message !== '请先解锁手机'
-          )
-            throw error
+          if (!isDeviceLockedError(error)) throw error
+          controller.signal.throwIfAborted()
           unlockOpen.value = true
           await pause(controller.signal)
           continue
         }
         if (controller.signal.aborted || disposed || target !== serial.value) {
-          await api.stopSession(info.id)
+          await stopCastSession(info)
           return
         }
         windows.value = [...windows.value, { id: info.id, info, app }]

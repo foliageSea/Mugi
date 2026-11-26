@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty'
 import { api, errorText } from '@/services/api'
-import { requireWebUsbConnection } from '@/services/webusb'
 import {
   operate,
   parsePackages,
@@ -151,10 +150,7 @@ async function exportFile(index: number) {
 async function load() {
   await refresh()
   if (props.apps.length || controller.signal.aborted) return
-  const usb = requireWebUsbConnection(props.serial)
-  const labels = await (
-    usb ? usb.apps(controller.signal) : api.apps(props.serial).then((r) => r.apps)
-  ).catch(() => [])
+  const labels = await api.apps(props.serial, controller.signal).catch(() => [])
   if (controller.signal.aborted) return
   fallbackApps.value = labels
 }

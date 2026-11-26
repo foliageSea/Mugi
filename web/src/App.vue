@@ -40,6 +40,7 @@ import DesktopWindowControls from '@/components/DesktopWindowControls.vue'
 import { isDesktop, toggleNativeMaximise } from '@/services/desktop'
 import { connectWebUsb } from '@/services/webusb'
 import { api, errorText } from '@/services/api'
+import { stopCastSession } from '@/services/castSessions'
 import type { MetricSample } from '@/services/metrics'
 import { operate, parseBatteryState, type BatteryState } from '@/services/workbench'
 import { useDesktop } from '@/composables/useDesktop'
@@ -173,7 +174,7 @@ async function deviceRebooted(contextKey: string) {
   logcatOpen.value = false
   if (mode === 'webusb') await disconnectWebUsb()
   else {
-    await Promise.allSettled(sessions.map((w) => api.stopSession(w.info.id)))
+    await Promise.allSettled(sessions.map((w) => stopCastSession(w.info)))
     if (contextKey === controlContextKey.value) await refreshDevices()
   }
 }

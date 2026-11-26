@@ -199,13 +199,31 @@ export const api = {
   devices: () => request<{ devices: Device[] }>('GET', '/api/devices'),
   releaseAdb: () => request('POST', '/api/adb/release'),
   disconnect: (serial: string) => request('POST', '/api/devices/disconnect', { serial }),
-  apps: (serial: string) => request<{ apps: AndroidApp[] }>('GET', `${devicePath(serial)}/apps`),
+  apps: async (serial: string, signal?: AbortSignal) => {
+    const usb = requireWebUsbConnection(serial)
+    if (usb) return usb.apps(signal)
+    const { apps } = await request<{ apps?: AndroidApp[] }>(
+      'GET',
+      `${devicePath(serial)}/apps`,
+      undefined,
+      signal,
+    )
+    return apps ?? []
+  },
   pair: (host: string, port: number, code: string) =>
     request('POST', '/api/devices/pair', { host, port, code }),
   connect: (host: string, port: number) =>
     request<{ serial: string }>('POST', '/api/devices/connect', { host, port }),
-  unlockStatus: (serial: string, signal?: AbortSignal) =>
-    request<{ unlocked: boolean }>('GET', `${devicePath(serial)}/unlock-status`, undefined, signal),
+  unlockStatus: async (serial: string, signal?: AbortSignal) => {
+    const usb = requireWebUsbConnection(serial)
+    if (usb) return { unlocked: await usb.unlocked(signal) }
+    return request<{ unlocked: boolean }>(
+      'GET',
+      `${devicePath(serial)}/unlock-status`,
+      undefined,
+      signal,
+    )
+  },
   // Do not abort a creation response: the server may already own a session, which must be stopped explicitly.
   startSession: (serial: string, opts: SessionOptions) =>
     request<SessionInfo>('POST', `${devicePath(serial)}/sessions`, opts),

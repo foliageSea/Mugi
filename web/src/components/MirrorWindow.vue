@@ -29,23 +29,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Session } from '@/lib/scrcpy/session.js'
+import { ControlEncoder, navBack, navHome, navRecents } from '@mugi/web-adb/scrcpy'
 import {
-  WebUsbSession,
-  type WebUsbSessionHooks,
-  ControlEncoder,
-  navBack,
-  navHome,
-  navRecents,
-} from '@mugi/web-adb/scrcpy'
+  canResumeCastSession,
+  createCastSession,
+  startCastSession,
+  stopCastSession,
+  type CastSession,
+  type CastSessionHooks,
+} from '@/services/castSessions'
 import { useScreenOff } from '@/composables/useScreenOff'
-import { api, errorText } from '@/services/api'
+import { errorText } from '@/services/api'
 import { uploadFiles } from '@/services/files'
 import { downloadBlob } from '@/services/workbench'
 import WindowFrame from './WindowFrame.vue'
 import ConfirmOperation from './ConfirmOperation.vue'
 import type { DesktopWindow, SessionInfo } from '@/types'
-import { getActiveWebUsbConnection } from '@/services/webusb'
 const props = defineProps<{
   window: DesktopWindow
   audioOccupied: boolean
@@ -82,11 +81,7 @@ const ready = ref(false),
   title = ref(props.window.app?.name || info.deviceName || 'Android')
 const draggingFile = ref(0),
   progress = ref('')
-type MirrorSession = Pick<
-  Session,
-  'start' | 'close' | 'detach' | 'send' | 'setDisplayPower' | 'wakeScreen' | 'lockScreen'
->
-let session: MirrorSession | undefined,
+let session: CastSession | undefined,
   powerInitialized = false,
   disposed = false,
   stopRequested = false,
@@ -159,13 +154,7 @@ function stopSession(): Promise<void> {
   session = undefined
   stoppedId = target.id
   ++generation
-  stopping = (async () => {
-    try {
-      if (target.transport !== 'webusb') await api.stopSession(target.id)
-    } finally {
-      await previous?.close('session stopped')
-    }
-  })()
+  stopping = stopCastSession(target, previous)
   return stopping
 }
 async function close() {
@@ -198,18 +187,10 @@ async function toggleAudio() {
     // Keep Android's size and density independent of the desktop window.
     // Shrinking only the pixel dimensions makes the app's dp viewport too narrow.
     const opts = { ...currentInfo.opts, audio: enabled }
-    const next: SessionInfo =
-      info.transport === 'webusb'
-        ? {
-            ...currentInfo,
-            id: `webusb-${crypto.randomUUID()}`,
-            opts,
-            audioCodec: enabled ? 'opus' : undefined,
-          }
-        : await api.startSession(info.serial, opts)
+    const next = await startCastSession(info.serial, opts)
     // A window may be closed or its device disconnected while creation is pending.
     if (disposed || stopRequested) {
-      if (next.transport !== 'webusb') await api.stopSession(next.id)
+      await stopCastSession(next)
       return
     }
     currentInfo = next
@@ -260,8 +241,8 @@ function captureWindow() {
 const onPageHide = () => {
   // WebUSB sessions die with the page; Go-backed sessions stay alive on the
   // server, so only release local resources and let a reload re-attach.
-  if (info.transport === 'webusb') void close()
-  else session?.detach()
+  if (canResumeCastSession(currentInfo)) session?.detach()
+  else void close()
 }
 onMounted(async () => {
   await nextTick()
@@ -283,7 +264,7 @@ function connectSession() {
     (...args: Args) => {
       if (version === generation && !disposed && !stopRequested) callback(...args)
     }
-  const hooks: WebUsbSessionHooks = {
+  const hooks: CastSessionHooks = {
     onDeviceName: active((name) => {
       if (!props.window.app) title.value = name
     }),
@@ -327,16 +308,12 @@ function connectSession() {
       if (!disposed && !stopRequested) void close()
     }),
   }
-  if (info.transport === 'webusb') {
-    const connection = getActiveWebUsbConnection(info.serial)
-    if (!connection) {
-      toast.error('WebUSB 设备连接已失效，请重新连接')
-      void close()
-      return
-    }
-    session = new WebUsbSession(connection, currentInfo, canvas.value, hooks)
-  } else {
-    session = new Session(currentInfo, canvas.value, hooks)
+  try {
+    session = createCastSession(currentInfo, canvas.value, hooks)
+  } catch (error) {
+    toast.error(errorText(error))
+    void close()
+    return
   }
   session.start()
 }
