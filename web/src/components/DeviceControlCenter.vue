@@ -750,6 +750,13 @@ async function focusTitle(event: Event) {
   --cc-line: light-dark(color-mix(in srgb, var(--foreground) 18%, transparent), #b9d3ff22);
   --cc-muted: light-dark(color-mix(in srgb, var(--foreground) 76%, transparent), #b8c4d8);
   --cc-accent: light-dark(var(--primary), #b4d3ff);
+  --cc-network-active-bg: light-dark(
+    color-mix(in srgb, var(--primary) 11%, transparent),
+    rgb(37 54 78 / 76%)
+  );
+  --cc-network-active-border: light-dark(#245eaf40, #b4d3ff55);
+  --cc-network-active-detail: light-dark(#294f80, #d6e7ff);
+  --cc-network-active-icon: light-dark(var(--primary), #b3d5ff);
   --cc-danger: light-dark(var(--destructive), #ffb8bd);
   --cc-track: #55555d;
   --cc-track-shadow: inset 0 1px 2px #0004, 0 0 0 1px #ffffff26;
@@ -847,8 +854,11 @@ async function focusTitle(event: Event) {
   border-radius: 12px;
 }
 .control-center-network[data-active='true'] {
-  border-color: light-dark(color-mix(in srgb, var(--primary) 40%, transparent), #83b5fb6b);
-  background: light-dark(color-mix(in srgb, var(--primary) 14%, transparent), #344e74);
+  border-color: var(--cc-network-active-border);
+  background-color: var(--cc-network-active-bg);
+}
+.control-center-network[data-active='true'] :is(small, .control-center-tile-settings) {
+  color: var(--cc-network-active-detail);
 }
 .control-center-tile {
   display: flex;
@@ -881,16 +891,26 @@ async function focusTitle(event: Event) {
   color: var(--cc-accent);
 }
 .control-center-network[data-active='true'] .control-center-tile-icon {
-  background: light-dark(var(--primary), #9fc9ff);
-  color: light-dark(#fff, #10294a);
+  background: var(--cc-network-active-icon);
+  color: var(--primary-foreground);
 }
 .control-center-tile-settings {
+  position: relative;
   display: grid;
   width: 28px;
   flex: none;
   place-items: center;
   border-radius: 10px;
   color: var(--cc-muted);
+}
+.control-center-network[data-active='true'] .control-center-tile-settings::before {
+  position: absolute;
+  inset-block: 12px;
+  inset-inline-start: 0;
+  width: 1px;
+  background: var(--cc-network-active-border);
+  pointer-events: none;
+  content: '';
 }
 .device-control-center button svg,
 .control-center-level-icon {

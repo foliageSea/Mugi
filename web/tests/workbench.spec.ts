@@ -272,6 +272,36 @@ test('the TopBar control center keeps ordinary device actions in one dialog', as
 })
 
 for (const theme of ['light', 'dark'] as const) {
+  test(`${theme} mode distinguishes enabled radios without relying on color alone`, async ({
+    page,
+  }) => {
+    if (theme === 'light') await page.setViewportSize({ width: 360, height: 700 })
+    const { mock } = await setup(page)
+    mock.controlState.wifi_connected = 1
+    mock.controlState.bluetooth = 1
+    if (theme === 'light') {
+      await page.getByRole('button', { name: '切换到亮色模式', exact: true }).click()
+    }
+    await expect(page.locator('html')).toHaveCSS('color-scheme', theme)
+    const { panel } = await openControlCenter(page)
+    const connection = panel.getByRole('group', { name: '连接', exact: true })
+    const tile = (name: string) =>
+      connection
+        .locator('.control-center-network')
+        .filter({ has: page.getByRole('switch', { name, exact: true }) })
+    const wifi = tile('Wi-Fi')
+    const bluetooth = tile('蓝牙')
+    const airplane = tile('飞行模式')
+    await expect(wifi).toContainText('已连接')
+    await expect(bluetooth).toContainText('已开启')
+    await expect(airplane).toContainText('已关闭')
+    const idleBackground = await airplane.evaluate((node) => getComputedStyle(node).backgroundColor)
+    const enabledBackground = await wifi.evaluate((node) => getComputedStyle(node).backgroundColor)
+    expect(enabledBackground).not.toBe(idleBackground)
+    await expect(bluetooth).toHaveCSS('background-color', enabledBackground)
+    await expectNoHorizontalOverflow(connection)
+  })
+
   test(`${theme} mode keeps the brightness slider and volume meter visible`, async ({ page }) => {
     await setup(page)
     if (theme === 'light') {
