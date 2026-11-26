@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { deleteWallpaper, readWallpaper, writeWallpaper } from '@/services/wallpaper'
 
 const PREFERENCES_KEY = 'mugi.wallpaper.preferences.v1'
@@ -34,8 +34,12 @@ export function useWallpaper() {
   const brightness = ref(preferences.brightness)
   const contrast = ref(preferences.contrast)
   const wallpaperName = ref(preferences.name)
-  const wallpaperUrl = ref('')
-  const loading = ref(true)
+  // Vue can remount the desktop during HMR. Keep its wallpaper URL available
+  // instead of showing the default while IndexedDB is read again.
+  const hotData = import.meta.hot?.data as { wallpaperUrl?: Ref<string> } | undefined
+  const wallpaperUrl = hotData?.wallpaperUrl ?? ref('')
+  if (hotData) hotData.wallpaperUrl = wallpaperUrl
+  const loading = ref(!wallpaperUrl.value)
   const hasCustomWallpaper = computed(() => !!wallpaperUrl.value)
   const wallpaperStyle = computed(() => ({
     backgroundImage: wallpaperUrl.value ? `url("${wallpaperUrl.value}")` : undefined,
@@ -59,9 +63,11 @@ export function useWallpaper() {
   }
 
   async function load() {
+    if (wallpaperUrl.value) return
     loading.value = true
     try {
       const image = await readWallpaper()
+      if (wallpaperUrl.value) return
       useObjectUrl(image)
       if (!image) {
         wallpaperName.value = ''
@@ -99,7 +105,8 @@ export function useWallpaper() {
   }
 
   watch([brightness, contrast], remember)
-  onBeforeUnmount(() => useObjectUrl(null))
+  // In dev the page owns the URL across remounts; replacement and reset still revoke it.
+  if (!hotData) onBeforeUnmount(() => useObjectUrl(null))
 
   return {
     brightness,
