@@ -547,13 +547,6 @@
 .dock-item[data-minimized='true'] {
   border-style: dashed;
 }
-.dock-item > .app-art > svg {
-  width: 38px;
-  height: 38px;
-}
-.dock-item > .app-art {
-  --app-icon-background: #000;
-}
 .desktop-utilities-card {
   grid-column: 3;
   justify-self: end;
@@ -860,14 +853,6 @@
 .android-app-icon.is-loaded {
   opacity: 1;
 }
-.app-art svg {
-  width: 44px;
-  height: 44px;
-}
-.app-art > svg > rect:first-child,
-.app-art > svg > path:first-child {
-  fill: var(--app-icon-background);
-}
 .generic-art {
   display: grid;
   place-items: center;
@@ -876,33 +861,12 @@
   border-radius: 10px;
   border: 2px solid #555760;
   background: var(--app-icon-background);
-  color: #495563;
+  color: #3ddc84;
   box-shadow: 0 1px 0 #ffffff50 inset;
 }
 .generic-art svg {
   width: 22px;
   height: 22px;
-  stroke-width: 1.8px;
-}
-.app-art[data-tone='1'] .generic-art {
-  background: var(--app-icon-background);
-  color: #566348;
-}
-.app-art[data-tone='2'] .generic-art {
-  background: var(--app-icon-background);
-  color: #664e67;
-}
-.app-art[data-tone='3'] .generic-art {
-  background: var(--app-icon-background);
-  color: #3e6366;
-}
-.app-art[data-tone='4'] .generic-art {
-  background: var(--app-icon-background);
-  color: #695849;
-}
-.app-art[data-tone='5'] .generic-art {
-  background: var(--app-icon-background);
-  color: #5c5473;
 }
 .window-frame {
   position: absolute;
@@ -2060,8 +2024,7 @@ body[data-window-gesture='resize'] * {
   padding: 8px 10px;
   text-align: left;
 }
-.app-manager-row .app-art,
-.app-manager-row .app-art > svg {
+.app-manager-row .app-art {
   width: 32px;
   height: 32px;
 }

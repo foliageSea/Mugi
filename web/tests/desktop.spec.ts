@@ -100,6 +100,14 @@ async function backend(
           output: 'AC powered: false\nUSB powered: true\nstatus: 2\nlevel: 76\nscale: 100',
         }
       }
+      if (body.operation === 'packages') {
+        data = {
+          output: '__ALL__\npackage:com.android.settings\n__SYSTEM__\npackage:com.android.settings',
+        }
+      }
+      if (body.operation === 'package-info' || body.operation === 'package-paths') {
+        data = { output: '' }
+      }
     } else if (path.endsWith('/sessions') && method === 'POST') {
       if (state.conflict) {
         state.conflict = false
@@ -384,7 +392,17 @@ test('launcher shows real Android icons and falls back when extraction fails', a
   await expect(photos.locator('img.is-loaded')).toBeVisible()
   await expect(photos.locator('svg')).toHaveCount(0)
   await expect(messages.locator('img')).toHaveCount(0)
-  await expect(messages.locator('svg')).toBeVisible()
+  await expect(messages.locator('.android-app-placeholder')).toBeVisible()
+})
+
+test('app manager uses the Android placeholder for apps without an icon', async ({ page }) => {
+  await backend(page)
+  const dock = page.getByRole('navigation', { name: '工作区操作' })
+  await dock.getByRole('button', { name: '应用管理', exact: true }).click()
+  const row = page.getByRole('button', { name: /com\.android\.settings/ })
+  await expect(row.locator('.android-app-placeholder')).toBeVisible()
+  await row.click()
+  await expect(page.locator('.app-manager-detail .android-app-placeholder')).toBeVisible()
 })
 
 for (const width of [1200, 390]) {
@@ -1166,7 +1184,7 @@ test('failed audio reconnect reports the error and removes the stopped window', 
   expect(state.stops).toEqual(['s-1'])
 })
 
-test('all nine built-in Dock controls show decorative image artwork', async ({ page }) => {
+test('all nine built-in Dock controls show decorative artwork', async ({ page }) => {
   await backend(page)
   const dock = page.getByRole('navigation', { name: '工作区操作' })
   for (const name of [
@@ -1182,7 +1200,13 @@ test('all nine built-in Dock controls show decorative image artwork', async ({ p
   ]) {
     await test.step(name, async () => {
       const button = dock.getByRole('button', { name, exact: true })
-      await expectArtwork(button.locator('img.dock-art'))
+      if (name === '关于设备') {
+        const artwork = button.locator('svg.dock-art')
+        await expect(artwork).toBeVisible()
+        await expect(artwork).toHaveAttribute('aria-hidden', 'true')
+      } else {
+        await expectArtwork(button.locator('img.dock-art'))
+      }
     })
   }
 })
@@ -1252,7 +1276,7 @@ test('disabled Dock controls still explain their function on hover', async ({ pa
   await expect(page.getByRole('tooltip', { name: '镜像屏幕', exact: true })).toBeVisible()
 })
 
-test('generic app icon stays inside its Dock artwork', async ({ page }) => {
+test('Android placeholder stays inside its Dock artwork', async ({ page }) => {
   await backend(page)
   await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()
   await page.getByRole('button', { name: '打开 设置', exact: true }).click()
@@ -1260,7 +1284,7 @@ test('generic app icon stays inside its Dock artwork', async ({ page }) => {
   const dockButton = dock.getByRole('button', { name: '切换到 设置 窗口', exact: true })
   await expect(dockButton.locator('img.dock-art')).toHaveCount(0)
   const artwork = dockButton.locator('.app-art .generic-art')
-  const icon = artwork.locator('svg')
+  const icon = artwork.locator('.android-app-placeholder')
   await expect(artwork).toBeVisible()
   await expect(icon).toHaveCSS('width', '22px')
   await expect(icon).toHaveCSS('height', '22px')

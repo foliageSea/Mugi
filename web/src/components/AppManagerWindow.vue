@@ -221,7 +221,7 @@ onBeforeUnmount(() => {
             :disabled="!!busy"
             @click="selected = app.package"
           >
-            <AppIcon :name="app.name" :package="app.package" :icon-url="app.iconUrl" />
+            <AppIcon :icon-url="app.iconUrl" />
             <span class="flex min-w-0 flex-1 flex-col gap-1">
               <span class="truncate">{{ app.name }}</span>
               <small class="truncate">
@@ -239,7 +239,7 @@ onBeforeUnmount(() => {
         </div>
         <section v-if="current" class="app-manager-detail" :aria-busy="detailLoading">
           <div class="flex items-center gap-3">
-            <AppIcon :name="current.name" :package="current.package" :icon-url="current.iconUrl" />
+            <AppIcon :icon-url="current.iconUrl" />
             <div class="min-w-0">
               <h3 class="break-all">{{ current.name }}</h3>
               <p class="text-sm text-muted-foreground break-all">{{ current.package }}</p>

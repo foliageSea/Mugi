@@ -104,7 +104,7 @@ function keyboard(event: KeyboardEvent) {
           :aria-label="`打开 ${app.name}`"
           @click="emit('launch', app)"
         >
-          <AppIcon :name="app.name" :package="app.package" :icon-url="app.iconUrl" />
+          <AppIcon :icon-url="app.iconUrl" />
           <span>{{ app.name }}</span>
         </button>
       </div>
