@@ -552,6 +552,98 @@ test('mirror controls collapse into a bottom-right menu', async ({ page }) => {
   await expect(trigger).toBeFocused()
 })
 
+test('mirror maximize fills the workspace, centers the canvas, and restores bounds', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 760, height: 740 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await backend(page)
+  await page.getByRole('button', { name: '镜像屏幕', exact: true }).click()
+  const workspace = page.locator('.desktop-workspace')
+  const mirror = workspace.locator('.mirror-window')
+  const maximize = mirror.getByRole('button', { name: '最大化 Test Android 窗口', exact: true })
+  const restore = mirror.getByRole('button', { name: '还原 Test Android 窗口', exact: true })
+  await expect(maximize).toBeVisible()
+  await expect(mirror).not.toHaveClass(/window-motion-enter-active/)
+  const initial = (await mirror.boundingBox())!
+  const area = (await workspace.boundingBox())!
+  expect(initial.width).toBeLessThan(area.width)
+
+  await maximize.click()
+  await expect(restore).toBeVisible()
+  await expect.poll(() => mirror.boundingBox()).toEqual(area)
+  expect(await page.evaluate(() => document.fullscreenElement)).toBeNull()
+
+  const canvas = (await mirror.locator('canvas').boundingBox())!
+  const titlebar = (await mirror.locator('.mirror-titlebar').boundingBox())!
+  const toolbar = (await mirror.locator('.mirror-toolbar').boundingBox())!
+  const contentTop = titlebar.y + titlebar.height
+  const contentHeight = toolbar.y - contentTop
+  expect(canvas.width / canvas.height).toBeCloseTo(1080 / 2400, 2)
+  expect(canvas.height).toBeCloseTo(contentHeight, 0)
+  expect(canvas.x + canvas.width / 2).toBeCloseTo(area.x + area.width / 2, 0)
+  expect(canvas.y + canvas.height / 2).toBeCloseTo(contentTop + contentHeight / 2, 0)
+
+  await restore.click()
+  await expect(maximize).toBeVisible()
+  await expect.poll(() => mirror.boundingBox()).toEqual(initial)
+})
+
+test('mirror canvas follows the decoded frame aspect ratio instead of portrait metadata', async ({
+  page,
+}) => {
+  const frameSize = { width: 800, height: 450 }
+  await page.addInitScript(({ width, height }) => {
+    window.VideoDecoder = class {
+      state = 'unconfigured'
+      constructor(private hooks: VideoDecoderInit) {}
+      configure() {
+        this.state = 'configured'
+        queueMicrotask(() => {
+          const canvas = document.createElement('canvas')
+          canvas.width = width
+          canvas.height = height
+          this.hooks.output(new VideoFrame(canvas, { timestamp: 0 }))
+        })
+      }
+      close() {
+        this.state = 'closed'
+      }
+    } as unknown as typeof VideoDecoder
+  }, frameSize)
+  await page.setViewportSize({ width: 1200, height: 780 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await backend(page) // Advertises a 1080 × 2400 portrait video stream.
+  await page.getByRole('button', { name: '镜像屏幕', exact: true }).click()
+  const mirror = page.locator('.mirror-window')
+  const canvas = mirror.locator('canvas')
+  const maximize = mirror.getByRole('button', { name: '最大化 Test Android 窗口', exact: true })
+  const restore = mirror.getByRole('button', { name: '还原 Test Android 窗口', exact: true })
+  await expect(canvas).toHaveJSProperty('width', frameSize.width)
+  await expect(canvas).toHaveJSProperty('height', frameSize.height)
+
+  const expectDecodedRatio = async () => {
+    await expect
+      .poll(async () => {
+        const bounds = await canvas.boundingBox()
+        return bounds ? bounds.width / bounds.height : 0
+      })
+      .toBeCloseTo(frameSize.width / frameSize.height, 2)
+  }
+
+  for (const width of [1200, 760]) {
+    await test.step(`normal and maximized at ${width}px`, async () => {
+      await page.setViewportSize({ width, height: 780 })
+      await expect(maximize).toBeVisible()
+      await expectDecodedRatio()
+      await maximize.click()
+      await expect(restore).toBeVisible()
+      await expectDecodedRatio()
+      await restore.click()
+    })
+  }
+})
+
 test('collapsed controls remain usable in fullscreen and after exiting', async ({ page }) => {
   const state = await backend(page)
   await page.getByRole('button', { name: '镜像屏幕', exact: true }).click()
@@ -1662,10 +1754,10 @@ test('window zoom restores geometry and keyboard shortcuts work over Finder', as
   await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()
   await page.getByRole('button', { name: '打开 照片', exact: true }).click()
   const mirror = page.locator('.mirror-window')
-  const screen = mirror.locator('.mirror-screen')
+  const canvas = mirror.locator('canvas')
   await expect
     .poll(async () => {
-      const rect = await screen.boundingBox()
+      const rect = await canvas.boundingBox()
       return rect!.width / rect!.height
     })
     .toBeCloseTo(1080 / 2400, 2)
@@ -1674,7 +1766,7 @@ test('window zoom restores geometry and keyboard shortcuts work over Finder', as
   await mirror.locator('.window-caption').dblclick()
   await expect(page.getByRole('button', { name: '还原 照片 窗口' })).toBeVisible()
   await expect(page.getByRole('button', { name: '等比调整窗口' })).toBeHidden()
-  const zoomed = await screen.boundingBox()
+  const zoomed = await canvas.boundingBox()
   expect(zoomed!.width / zoomed!.height).toBeCloseTo(1080 / 2400, 2)
   await page.getByRole('button', { name: '还原 照片 窗口' }).click()
   expect(await mirror.boundingBox()).toEqual(before)

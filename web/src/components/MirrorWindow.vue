@@ -295,7 +295,10 @@ function connectSession() {
       connecting.value = false
       autoScreenOff()
     }),
-    onResize: active(updateRatio),
+    onResize: active((width, height) => {
+      if (!ready.value) updateRatio(width, height)
+    }),
+    onFrameSize: active(updateRatio),
     onClipboard: active(async (text) => {
       try {
         await navigator.clipboard.writeText(text)
@@ -352,7 +355,6 @@ onBeforeUnmount(() => {
     class="mirror-window"
     :title="title"
     :control-label="` ${title} 窗口`"
-    zoom-label="放大"
     titlebar-class="mirror-titlebar"
     resize-class="mirror-resize-handle"
     resize-label="等比调整窗口"

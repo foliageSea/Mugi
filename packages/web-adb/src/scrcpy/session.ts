@@ -14,6 +14,7 @@ export interface WebUsbSessionHooks {
   onFirstFrame?: () => void
   onError?: (error: unknown) => void
   onResize?: (width: number, height: number) => void
+  onFrameSize?: (width: number, height: number) => void
   onAudioEnd?: () => void
   onAudioUnavailable?: () => void
   onDisplayPower?: (on: boolean) => void
@@ -53,6 +54,7 @@ export class WebUsbSession {
         this.frameSize = { width, height }
         hooks.onResize?.(width, height)
       },
+      onFrameSize: hooks.onFrameSize,
       onRequestKeyFrame: () => this.send(ControlEncoder.resetVideo()),
       onError: (error: unknown) => this.fail(error),
     })

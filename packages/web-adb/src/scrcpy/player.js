@@ -8,14 +8,17 @@ export class VideoPlayer {
   /**
    * @param {HTMLCanvasElement} canvas
    * @param {{ onError?: (error: unknown) => void, onFirstFrame?: () => void,
-   *   onResize?: (width: number, height: number) => void, onRequestKeyFrame?: () => void }} hooks
+   *   onResize?: (width: number, height: number) => void,
+   *   onFrameSize?: (width: number, height: number) => void, onRequestKeyFrame?: () => void }} hooks
    */
   constructor(canvas, hooks = {}) {
     this.canvas = canvas
     // alpha:false skips a compositing blend per frame; desynchronized lets the
     // canvas bypass the compositor queue to shave display latency.
     this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
-    this.hooks = hooks // {onError, onFirstFrame, onResize, onRequestKeyFrame}
+    this.hooks = hooks
+    this.frameWidth = 0
+    this.frameHeight = 0
     this.decoder = null
     this.codec = null
     this.width = 0
@@ -114,11 +117,17 @@ export class VideoPlayer {
 
   render(frame) {
     try {
-      if (frame.codedWidth !== this.canvas.width || frame.codedHeight !== this.canvas.height) {
-        this.canvas.width = frame.codedWidth
-        this.canvas.height = frame.codedHeight
+      const { displayWidth, displayHeight } = frame
+      if (displayWidth !== this.canvas.width || displayHeight !== this.canvas.height) {
+        this.canvas.width = displayWidth
+        this.canvas.height = displayHeight
       }
-      this.ctx.drawImage(frame, 0, 0)
+      this.ctx.drawImage(frame, 0, 0, displayWidth, displayHeight)
+      if (displayWidth !== this.frameWidth || displayHeight !== this.frameHeight) {
+        this.frameWidth = displayWidth
+        this.frameHeight = displayHeight
+        this.hooks.onFrameSize?.(displayWidth, displayHeight)
+      }
       if (this.firstFrame) {
         this.firstFrame = false
         if (this.hooks.onFirstFrame) this.hooks.onFirstFrame()

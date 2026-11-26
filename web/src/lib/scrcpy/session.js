@@ -37,6 +37,7 @@ export class Session {
         this.frameSize = { width: w, height: h }
         hooks.onResize && hooks.onResize(w, h)
       },
+      onFrameSize: hooks.onFrameSize,
       onRequestKeyFrame: () => this.requestKeyFrame(),
       onError: (error) => this.fail(error),
     })

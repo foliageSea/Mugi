@@ -82,14 +82,15 @@ watch(minimized, async (value) => {
   }
 })
 watch(
-  () => [rect.width, rect.height, props.geometry.aspectRatio],
+  () => [rect.width, rect.height, props.geometry.aspectRatio, maximized.value],
   () => {
-    const width = rect.width - (props.geometry.chrome?.width ?? 0)
+    const { aspectRatio, chrome } = props.geometry
+    let width = rect.width - (chrome?.width ?? 0)
+    const height = rect.height - (chrome?.height ?? 0)
+    if (maximized.value && aspectRatio) width = Math.min(width, Math.max(0, height) * aspectRatio)
     emit('resize', {
       width,
-      height: props.geometry.aspectRatio
-        ? width / props.geometry.aspectRatio
-        : rect.height - (props.geometry.chrome?.height ?? 0),
+      height: aspectRatio ? width / aspectRatio : height,
     })
   },
 )
@@ -109,6 +110,7 @@ defineExpose({ fullscreen, focus })
       active,
       closing,
       'window-manipulating': manipulating,
+      'window-maximized': maximized,
       'window-mobile-fullscreen': geometry.mobileFullscreen,
     }"
     :data-window-id="id"

@@ -836,7 +836,7 @@ onBeforeUnmount(() => {
             <dd><kbd>Esc</kbd></dd>
           </div>
           <div>
-            <dt>放大 / 还原窗口</dt>
+            <dt>最大化 / 还原窗口</dt>
             <dd>双击标题栏</dd>
           </div>
           <div>

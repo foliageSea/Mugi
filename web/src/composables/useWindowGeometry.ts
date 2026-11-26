@@ -30,6 +30,10 @@ export function useWindowGeometry(
   function fit(contentWidth?: number) {
     if (!root.value || mobile() || document.fullscreenElement === root.value) return
     const bounds = area()
+    if (maximized.value) {
+      Object.assign(rect, { x: 0, y: 0, width: bounds.width, height: bounds.height })
+      return
+    }
     const {
       aspectRatio,
       chrome = { width: 0, height: 48 },
@@ -37,19 +41,16 @@ export function useWindowGeometry(
     } = options()
     if (aspectRatio) {
       if (
-        maximized.value ||
         contentWidth !== undefined ||
         rect.width > bounds.width - 16 ||
         rect.height > bounds.height - 16
       ) {
-        const margin = maximized.value ? 24 : 16
+        const margin = 16
         Object.assign(
           rect,
           aspectWindowSize({
             ratio: aspectRatio,
-            contentWidth: maximized.value
-              ? bounds.width - margin - chrome.width
-              : (contentWidth ?? rect.width - chrome.width),
+            contentWidth: contentWidth ?? rect.width - chrome.width,
             chromeWidth: chrome.width,
             chromeHeight: chrome.height,
             maxOuterWidth: bounds.width - margin,
@@ -57,14 +58,6 @@ export function useWindowGeometry(
           }),
         )
       }
-      if (maximized.value) {
-        rect.x = (bounds.width - rect.width) / 2
-        rect.y = 12
-        return
-      }
-    } else if (maximized.value) {
-      Object.assign(rect, { x: 0, y: 0, width: bounds.width, height: bounds.height })
-      return
     } else {
       rect.width = Math.max(
         Math.min(minSize.width, bounds.width - 24),

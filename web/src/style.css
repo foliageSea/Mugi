@@ -1005,11 +1005,17 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  container-type: size;
+  display: grid;
+  place-items: center;
+  background: #050505;
 }
 .mirror-screen canvas {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: min(100%, calc(100cqh * var(--video-ratio)));
+  height: auto;
+  aspect-ratio: var(--video-ratio);
+  object-fit: contain;
   outline: none;
   touch-action: none;
 }
@@ -1085,16 +1091,8 @@
   width: 100vw !important;
   height: 100dvh !important;
 }
-.mirror-window:fullscreen {
-  /* Keep the video letterbox neutral without changing the themed controls. */
-  background: #050505;
-}
-.mirror-window:fullscreen .mirror-screen {
-  flex: none;
-  margin: auto;
-  width: min(100vw, calc((100dvh - 72px) * var(--video-ratio)));
-  height: auto;
-  aspect-ratio: var(--video-ratio);
+.mirror-window:is(.window-maximized, :fullscreen) {
+  border-radius: 0;
 }
 .window-frame:fullscreen .window-resize-handle {
   display: none;

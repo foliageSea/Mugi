@@ -4,6 +4,7 @@ export interface SessionHooks {
   onDeviceName?: (name: string) => void
   onFirstFrame?: () => void
   onResize?: (width: number, height: number) => void
+  onFrameSize?: (width: number, height: number) => void
   onClipboard?: (text: string) => void
   onError?: (error: unknown) => void
   onAudioEnd?: () => void
