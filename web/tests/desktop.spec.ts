@@ -387,6 +387,26 @@ test('launcher shows real Android icons and falls back when extraction fails', a
   await expect(messages.locator('svg')).toBeVisible()
 })
 
+for (const width of [1200, 390]) {
+  test(`Dock reuses the launcher icon at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await backend(page, { appIcons: true })
+    await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()
+    const photos = page.getByRole('button', { name: '打开 照片', exact: true })
+    const launcherIcon = photos.locator('img.is-loaded')
+    await expect(launcherIcon).toBeVisible()
+    const source = await launcherIcon.getAttribute('src')
+    await photos.click()
+
+    const dock = page.getByRole('navigation', { name: '工作区操作' })
+    const runningApp = dock.getByRole('button', { name: '切换到 照片 窗口', exact: true })
+    const dockIcon = runningApp.locator('img.is-loaded')
+    await expect(dockIcon).toBeVisible()
+    await expect(dockIcon).toHaveAttribute('src', source!)
+    await expect(runningApp.locator('.app-art svg')).toHaveCount(0)
+  })
+}
+
 test('app and mirror windows use the same initial size', async ({ page }) => {
   const state = await backend(page)
   await page.getByRole('button', { name: '打开应用启动器', exact: true }).click()

@@ -718,7 +718,12 @@ onBeforeUnmount(() => {
               :tooltip="`${item.app?.name || '镜像屏幕'}${minimized.includes(item.id) ? ' · 已最小化' : ''}`"
               @click="focusWindow(item.id)"
             >
-              <AppIcon v-if="item.app" :name="item.app.name" :package="item.app.package" />
+              <AppIcon
+                v-if="item.app"
+                :name="item.app.name"
+                :package="item.app.package"
+                :icon-url="item.app.iconUrl"
+              />
               <DockIcon v-else name="mirror" />
             </DockButton>
           </div>
