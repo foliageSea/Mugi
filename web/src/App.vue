@@ -44,6 +44,7 @@ import type { MetricSample } from '@/services/metrics'
 import { operate, parseBatteryState, type BatteryState } from '@/services/workbench'
 import { useDesktop } from '@/composables/useDesktop'
 import { useDockMagnification } from '@/composables/useDockMagnification'
+import { useDockPosition } from '@/composables/useDockPosition'
 import { useWallpaper } from '@/composables/useWallpaper'
 import { useTheme } from '@/composables/useTheme'
 import { useSuppressNativeTitles } from '@/composables/useSuppressNativeTitles'
@@ -197,7 +198,9 @@ watch(
   { flush: 'sync' },
 )
 const dock = ref<HTMLElement>()
-useDockMagnification(dock)
+const { dockPosition } = useDockPosition()
+const dockVertical = computed(() => dockPosition.value !== 'bottom')
+useDockMagnification(dock, dockVertical)
 const { activeId, minimized, windowIds, visibleIds, focusWindow, minimizeWindow, toggleDesktop } =
   provideWindowManager((id) => {
     dock.value
@@ -422,6 +425,8 @@ onBeforeUnmount(() => {
     class="desktop-shell"
     :class="{ 'native-desktop': isDesktop }"
     :data-custom-wallpaper="hasCustomWallpaper"
+    :data-dock-position="dockPosition"
+    :data-dock-vertical="dockVertical"
   >
     <div
       class="desktop-wallpaper"
@@ -604,7 +609,13 @@ onBeforeUnmount(() => {
     </main>
     <footer class="desktop-footer">
       <TooltipProvider :delay-duration="350" ignore-non-keyboard-focus>
-        <nav ref="dock" aria-label="工作区操作" class="desktop-actions">
+        <nav
+          ref="dock"
+          aria-label="工作区操作"
+          class="desktop-actions"
+          :data-position="dockPosition"
+          :data-vertical="dockVertical"
+        >
           <div class="dock-track">
             <DockButton
               tooltip="应用启动器"
@@ -698,7 +709,10 @@ onBeforeUnmount(() => {
             >
               <DockIcon name="logcat" />
             </DockButton>
-            <Separator v-if="windows.length" orientation="vertical" class="mx-1 self-center h-9" />
+            <Separator
+              v-if="windows.length"
+              :orientation="dockVertical ? 'horizontal' : 'vertical'"
+            />
             <DockButton
               v-for="item in windows"
               :key="item.id"

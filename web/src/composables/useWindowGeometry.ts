@@ -1,5 +1,6 @@
 import { onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue'
 import { aspectWindowSize, contentWidthFromDrag } from '@/lib/scrcpy/window-geometry.js'
+import { useDockPosition } from './useDockPosition'
 import { constrainWindowPosition, useWindowGesture } from './useWindowGesture'
 
 export interface WindowGeometryOptions {
@@ -18,6 +19,7 @@ export function useWindowGeometry(
 ) {
   const rect = reactive({ x: 0, y: 24, width: 420, height: 820 })
   const maximized = ref(false)
+  const { dockPosition } = useDockPosition()
   let restoreRect = { ...rect }
   let observer: ResizeObserver | undefined
   const { manipulating, start: startGesture, stop } = useWindowGesture()
@@ -31,7 +33,20 @@ export function useWindowGeometry(
     if (!root.value || mobile() || document.fullscreenElement === root.value) return
     const bounds = area()
     if (maximized.value) {
-      Object.assign(rect, { x: 0, y: 0, width: bounds.width, height: bounds.height })
+      const position = dockPosition.value
+      const workspace = root.value.parentElement
+      const inset =
+        position !== 'bottom' && workspace
+          ? Number.parseFloat(
+              getComputedStyle(workspace).getPropertyValue('--dock-maximize-inset'),
+            ) || 0
+          : 0
+      Object.assign(rect, {
+        x: position === 'left' ? inset : 0,
+        y: 0,
+        width: Math.max(0, bounds.width - inset),
+        height: bounds.height,
+      })
       return
     }
     const {
@@ -146,6 +161,14 @@ export function useWindowGeometry(
     () => options().aspectRatio,
     () => fit(rect.width - (options().chrome?.width ?? 0)),
   )
+  watch(
+    dockPosition,
+    () => {
+      if (maximized.value) fit()
+    },
+    { flush: 'post' },
+  )
+
   onMounted(() => {
     const bounds = area()
     const {

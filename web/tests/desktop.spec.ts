@@ -604,12 +604,21 @@ test('mirror maximize fills the workspace, centers the canvas, and restores boun
   await expect(maximize).toBeVisible()
   await expect(mirror).not.toHaveClass(/window-motion-enter-active/)
   const initial = (await mirror.boundingBox())!
-  const area = (await workspace.boundingBox())!
-  expect(initial.width).toBeLessThan(area.width)
+  const bounds = (await workspace.boundingBox())!
+  const dock = (await page.locator('.desktop-actions').boundingBox())!
+  expect(initial.width).toBeLessThan(bounds.width)
 
   await maximize.click()
   await expect(restore).toBeVisible()
-  await expect.poll(() => mirror.boundingBox()).toEqual(area)
+  await expect.poll(async () => {
+    const box = (await mirror.boundingBox())!
+    return box.x + box.width
+  }).toBe(bounds.x + bounds.width)
+  const area = (await mirror.boundingBox())!
+  expect(area.x).toBeGreaterThan(dock.x + dock.width)
+  expect(area.y).toBe(bounds.y)
+  expect(area.height).toBe(bounds.height)
+  expect(area.y + area.height).toBe(page.viewportSize()!.height)
   expect(await page.evaluate(() => document.fullscreenElement)).toBeNull()
 
   const canvas = (await mirror.locator('canvas').boundingBox())!
@@ -625,6 +634,36 @@ test('mirror maximize fills the workspace, centers the canvas, and restores boun
   await restore.click()
   await expect(maximize).toBeVisible()
   await expect.poll(() => mirror.boundingBox()).toEqual(initial)
+})
+
+test('maximized mirror reflows when Dock position changes', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await backend(page)
+  await page.getByRole('button', { name: '镜像屏幕', exact: true }).click()
+  const mirror = page.locator('.mirror-window')
+  await mirror.getByRole('button', { name: '最大化 Test Android 窗口', exact: true }).click()
+  const workspace = page.locator('.desktop-workspace')
+  const dock = page.locator('.desktop-actions')
+  const settings = page.getByRole('button', { name: '设置', exact: true })
+  for (const [label, edge] of [['右侧', 'right'], ['底部', 'bottom']] as const) {
+    await settings.click()
+    await page.getByRole('combobox', { name: 'Dock 位置' }).click()
+    await page.getByRole('option', { name: label, exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '设置', exact: true })
+    await expect(dialog.getByRole('combobox', { name: 'Dock 位置' })).toHaveText(label)
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+    await expect(dock).toHaveAttribute('data-position', edge)
+    const area = (await workspace.boundingBox())!
+    if (edge === 'right') {
+      await expect.poll(async () => (await mirror.boundingBox())!.x).toBe(area.x)
+      const box = (await mirror.boundingBox())!
+      expect(box.x + box.width).toBeLessThan((await dock.boundingBox())!.x)
+      expect(box.y + box.height).toBe(page.viewportSize()!.height)
+    } else {
+      await expect.poll(() => mirror.boundingBox()).toEqual(area)
+      expect(area.y + area.height).toBeLessThan((await dock.boundingBox())!.y)
+    }
+  }
 })
 
 test('mirror canvas follows the decoded frame aspect ratio instead of portrait metadata', async ({
@@ -1157,6 +1196,24 @@ test('all nine built-in Dock controls show decorative artwork', async ({ page })
   }
 })
 
+test('side Dock magnifies inward and resets after leaving', async ({ page }) => {
+  await backend(page)
+  const dock = page.locator('.desktop-actions')
+  const icon = dock.getByRole('button', { name: '性能监控', exact: true })
+  const next = dock.getByRole('button', { name: '终端', exact: true })
+  const before = (await icon.boundingBox())!
+  const nextBefore = (await next.boundingBox())!
+  await icon.hover()
+  await expect.poll(async () => (await icon.boundingBox())!.width).toBeGreaterThan(before.width * 1.4)
+  expect((await icon.boundingBox())!.x).toBeCloseTo(before.x, 0)
+  await expect.poll(async () => {
+    const box = (await next.boundingBox())!
+    return box.y + box.height / 2
+  }).toBeGreaterThan(nextBefore.y + nextBefore.height / 2)
+  await page.mouse.move(400, 80)
+  await expect.poll(() => icon.boundingBox()).toEqual(before)
+})
+
 test('Dock shows a tooltip on hover and keyboard focus', async ({ page }) => {
   await backend(page)
   const dock = page.getByRole('navigation', { name: '工作区操作' })
@@ -1170,9 +1227,9 @@ test('Dock shows a tooltip on hover and keyboard focus', async ({ page }) => {
   await expect(bubble.locator('.dock-tooltip-arrow')).toHaveCSS('fill', 'rgb(41, 46, 57)')
   const box = (await bubble.boundingBox())!
   const icon = (await launcher.boundingBox())!
-  expect(box.y + box.height).toBeLessThan(icon.y)
-  expect(box.x + box.width / 2).toBeCloseTo(icon.x + icon.width / 2, 0)
-  await page.mouse.move(20, 100)
+  expect(box.x).toBeGreaterThan(icon.x + icon.width)
+  expect(box.y + box.height / 2).toBeCloseTo(icon.y + icon.height / 2, 0)
+  await page.mouse.move(300, 100)
   await expect(tooltip).toHaveCount(0)
 
   for (let i = 0; i < 12; i++) {
@@ -1202,7 +1259,7 @@ test('Dock performance tooltip keeps the same short label when toggled', async (
   await expect(performanceTooltip).toBeVisible()
   await performance.click()
   await expect(performance).toHaveAttribute('aria-pressed', 'true')
-  await page.mouse.move(20, 100)
+  await page.mouse.move(300, 100)
   await performance.hover()
   await expect(performanceTooltip).toBeVisible()
 })
@@ -1366,6 +1423,7 @@ for (const kind of ['mirror', 'files'] as const) {
   test(`${kind} window tracks dragging beneath the Dock and preserves its geometry`, async ({
     page,
   }) => {
+    await page.addInitScript(() => localStorage.setItem('mugi.dock-position', 'bottom'))
     await backend(page)
     const isMirror = kind === 'mirror'
     await page
@@ -1373,7 +1431,7 @@ for (const kind of ['mirror', 'files'] as const) {
       .first()
       .click()
     const window = page.locator(isMirror ? '.mirror-window' : '.file-manager-dialog')
-    const title = window.locator(isMirror ? '.window-caption' : '.file-manager-title')
+    const title = window.locator(isMirror ? '.window-caption' : '.file-manager-toolbar')
     await expect(window).toBeVisible()
     await expect(window).not.toHaveClass(/window-motion-enter-active/)
     if (isMirror) {
@@ -1388,7 +1446,7 @@ for (const kind of ['mirror', 'files'] as const) {
     const bar = (await title.boundingBox())!
     const dock = (await page.locator('.desktop-actions').boundingBox())!
     const dx = dock.x + dock.width / 2 - (before.x + before.width / 2)
-    const start = { x: bar.x + bar.width / 2, y: bar.y + bar.height / 2 }
+    const start = { x: bar.x + bar.width / 2, y: bar.y + (isMirror ? bar.height / 2 : 8) }
     await page.mouse.move(start.x, start.y)
     await page.mouse.down()
     await page.mouse.move(start.x + dx, start.y + 150, { steps: 6 })
@@ -1821,10 +1879,12 @@ test('file manager window controls close, minimize and toggle maximize', async (
   await page.waitForTimeout(250)
   const maximized = await dialog.boundingBox()
   const workspace = await page.locator('.desktop-workspace').boundingBox()
-  expect(maximized?.x).toBe(workspace!.x + 12)
-  expect(maximized?.y).toBe(workspace!.y + 12)
-  expect(maximized?.width).toBe(workspace!.width - 24)
-  expect(maximized?.height).toBe(workspace!.height - 24)
+  const dock = (await page.locator('.desktop-actions').boundingBox())!
+  expect(maximized!.x).toBeGreaterThan(dock.x + dock.width)
+  expect(maximized!.x + maximized!.width).toBe(workspace!.x + workspace!.width)
+  expect(maximized?.y).toBe(workspace!.y)
+  expect(maximized?.height).toBe(workspace!.height)
+  expect(maximized!.y + maximized!.height).toBe(page.viewportSize()!.height)
   await expect(page.getByRole('button', { name: '调节文件管理器窗口大小' })).toBeHidden()
 
   await page.getByRole('button', { name: '还原文件管理器窗口' }).click()

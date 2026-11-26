@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { TooltipArrow, TooltipContent, TooltipPortal, TooltipRoot, TooltipTrigger } from 'reka-ui'
 import { Button } from '@/components/ui/button'
+import { useDockPosition } from '@/composables/useDockPosition'
 
 defineOptions({ inheritAttrs: false })
 defineProps<{ tooltip: string }>()
+const { dockPosition } = useDockPosition()
+const tooltipSides = { left: 'right', right: 'left', bottom: 'top' } as const
 </script>
 
 <template>
@@ -15,7 +18,7 @@ defineProps<{ tooltip: string }>()
     </TooltipTrigger>
     <TooltipPortal>
       <TooltipContent
-        side="top"
+        :side="tooltipSides[dockPosition]"
         :side-offset="8"
         :collision-padding="8"
         hide-when-detached

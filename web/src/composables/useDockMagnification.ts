@@ -1,7 +1,10 @@
-import { onBeforeUnmount, onMounted, type Ref } from 'vue'
+import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
 
-export function useDockMagnification(dock: Ref<HTMLElement | undefined>) {
-  let pointerX: number | undefined
+export function useDockMagnification(
+  dock: Ref<HTMLElement | undefined>,
+  vertical: Readonly<Ref<boolean>>,
+) {
+  let pointer: number | undefined
   let frame = 0
   let cleanup: (() => void) | undefined
 
@@ -18,17 +21,24 @@ export function useDockMagnification(dock: Ref<HTMLElement | undefined>) {
       const items = Array.from(
         track!.querySelectorAll<HTMLElement>('.dock-item, [data-slot="separator"]'),
       )
-      const left = track!.getBoundingClientRect().left - track!.scrollLeft
+      const rect = track!.getBoundingClientRect()
+      const alongY = vertical.value
+      const start = alongY ? rect.top - track!.scrollTop : rect.left - track!.scrollLeft
       // Use layout coordinates so animated transforms never feed back into the distance.
       const sizes = items.map((item) => {
         if (!item.classList.contains('dock-item')) return { scale: 1, extra: 0 }
-        const width = item.offsetWidth
-        const distance = Math.abs((pointerX ?? Infinity) - (left + item.offsetLeft + width / 2))
+        const size = alongY ? item.offsetHeight : item.offsetWidth
+        const offset = alongY ? item.offsetTop : item.offsetLeft
+        const distance = Math.abs((pointer ?? Infinity) - (start + offset + size / 2))
         const influence = distance < 140 ? (1 + Math.cos((distance / 140) * Math.PI)) / 2 : 0
-        return { scale: 1 + influence * 0.5, extra: width * influence * 0.5 }
+        return { scale: 1 + influence * 0.5, extra: size * influence * 0.5 }
       })
       const expansion = sizes.reduce((total, item) => total + item.extra, 0)
       root!.style.setProperty('--dock-expansion', `${expansion}px`)
+      root!.style.setProperty(
+        '--dock-cross-expansion',
+        `${Math.max(0, ...sizes.map((item) => item.extra))}px`,
+      )
       let shift = -expansion / 2
       items.forEach((item, index) => {
         const { scale, extra } = sizes[index]!
@@ -43,21 +53,41 @@ export function useDockMagnification(dock: Ref<HTMLElement | undefined>) {
     }
 
     function reset() {
-      pointerX = undefined
+      pointer = undefined
       root!.removeAttribute('data-magnifying')
       schedule()
     }
 
     function move(event: PointerEvent) {
       if (event.pointerType === 'touch' || !motion.matches || !hover.matches) return
-      pointerX = event.clientX
+      pointer = vertical.value ? event.clientY : event.clientX
       root!.setAttribute('data-magnifying', 'true')
       schedule()
     }
 
-    const resize = new ResizeObserver(reset)
+    function updateOverflow() {
+      const scrollable = vertical.value && track!.scrollHeight > track!.clientHeight
+      root!.toggleAttribute('data-scrollable', scrollable)
+    }
+
+    const stopWatching = watch(
+      vertical,
+      () => {
+        track.scrollTo(0, 0)
+        updateOverflow()
+        reset()
+      },
+      { flush: 'post' },
+    )
+    const resize = new ResizeObserver(() => {
+      updateOverflow()
+      reset()
+    })
     resize.observe(track)
-    const children = new MutationObserver(schedule)
+    const children = new MutationObserver(() => {
+      updateOverflow()
+      schedule()
+    })
     children.observe(track, { childList: true })
     root.addEventListener('pointermove', move)
     root.addEventListener('pointerleave', reset)
@@ -67,6 +97,7 @@ export function useDockMagnification(dock: Ref<HTMLElement | undefined>) {
     motion.addEventListener('change', reset)
     hover.addEventListener('change', reset)
     cleanup = () => {
+      stopWatching()
       resize.disconnect()
       children.disconnect()
       root.removeEventListener('pointermove', move)

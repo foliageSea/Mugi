@@ -13,6 +13,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useAudioForwarding } from '@/composables/useAudioForwarding'
+import { useDockPosition } from '@/composables/useDockPosition'
 import { castPresets, useCastSettings } from '@/composables/useCastSettings'
 import { useScreenOff } from '@/composables/useScreenOff'
 import { useWindowControls } from '@/composables/useWindowControls'
@@ -29,6 +30,7 @@ const castFields = [
   { key: 'bitRateMbps', label: '视频码率', unit: 'Mbps', fallback: '' },
 ] as const
 const { windowControlStyle } = useWindowControls()
+const { dockPosition } = useDockPosition()
 const { theme } = useTheme()
 const lightMode = computed({
   get: () => theme.value === 'light',
@@ -65,6 +67,19 @@ const lightMode = computed({
               <ToggleGroupItem value="windows" class="px-2 sm:px-3">Windows</ToggleGroupItem>
               <ToggleGroupItem value="mac" class="px-2 sm:px-3">Mac</ToggleGroupItem>
             </ToggleGroup>
+          </div>
+          <div class="settings-row">
+            <FieldLabel for="settings-dock-position">Dock 位置</FieldLabel>
+            <Select v-model="dockPosition">
+              <SelectTrigger id="settings-dock-position" size="sm" class="w-28 shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="left">左侧</SelectItem>
+                <SelectItem value="bottom">底部</SelectItem>
+                <SelectItem value="right">右侧</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
