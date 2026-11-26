@@ -26,6 +26,7 @@ export const definitions: Record<
   | 'rotation'
   | 'auto-rotation'
   | 'brightness'
+  | 'display-brightness'
   | 'auto-brightness'
   | 'control-state'
   | 'media-volume'

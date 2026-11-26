@@ -27,7 +27,8 @@ async function usbPage(page: Page, photoVersion?: number) {
         wifi_connected: 0,
         bluetooth: 0,
         airplane: 0,
-        brightness: 128,
+        brightness: 135,
+        display_brightness: '0.52755904,0.035433073,1.0',
         auto_brightness: 0,
         volume: '5,0,15',
       },
@@ -128,12 +129,17 @@ async function usbPage(page: Page, photoVersion?: number) {
               const [level, min, max] = state.controls.volume.split(',').map(Number)
               const delta = command === 'input keyevent 24' ? 1 : -1
               state.controls.volume = `${Math.min(max, Math.max(min, level + delta))},${min},${max}`
-            } else if (command === 'settings put system screen_brightness_mode 1') {
+            } else if (command === 'settings put --user current system screen_brightness_mode 1') {
               state.controls.auto_brightness = 1
             } else {
-              const brightness = command.match(/settings put system screen_brightness '(\d+)'$/)
+              const brightness =
+                command.includes('cmd display set-brightness') && command.match(/-v level='(\d+)'/)
               if (brightness) {
-                state.controls.brightness = Number(brightness[1])
+                state.controls.display_brightness = [
+                  Number(brightness[1]) / 1_000_000,
+                  0.035433073,
+                  1,
+                ].join(',')
                 state.controls.auto_brightness = 0
               }
             }
@@ -551,7 +557,7 @@ test('WebUSB control center reads state and sends actions only over USB', async 
   const autoBrightness = panel.getByRole('button', { name: '自动亮度', exact: true })
   await expect(wifi).toBeChecked()
   await expect(wifi).toContainText('未连接')
-  await expect(brightness).toHaveAttribute('aria-valuenow', '128')
+  await expect(brightness).toHaveAttribute('aria-valuenow', '88')
   await expect(autoBrightness).toHaveAttribute('aria-pressed', 'false')
   await expect(volumeLevel(5)).toBeVisible()
 
@@ -565,16 +571,22 @@ test('WebUSB control center reads state and sends actions only over USB', async 
   expect(await commandCount("svc wifi 'disable'")).toBe(1)
 
   await brightness.press('End')
-  await expect
-    .poll(() =>
-      commandCount(
-        "settings put system screen_brightness_mode 0 && settings put system screen_brightness '255'",
+  const displayWrites = () =>
+    page.evaluate(() =>
+      (window as any).__usb.commands.filter((command: string) =>
+        command.includes('cmd display set-brightness'),
       ),
     )
-    .toBe(1)
+  await expect
+    .poll(displayWrites)
+    .toEqual([
+      'b=$(awk -v level=\'1000000\' \'BEGIN { printf "%.6f", level / 1000000 }\') && settings put --user current system screen_brightness_mode 0 && cmd display set-brightness "$b"',
+    ])
   await expect(panel.getByRole('status')).toHaveText('已执行：设置亮度')
   await autoBrightness.click()
-  await expect.poll(() => commandCount('settings put system screen_brightness_mode 1')).toBe(1)
+  await expect
+    .poll(() => commandCount('settings put --user current system screen_brightness_mode 1'))
+    .toBe(1)
   await expect(autoBrightness).toHaveAttribute('aria-pressed', 'true')
 
   for (const [label, keycode, level] of [

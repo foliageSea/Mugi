@@ -49,6 +49,7 @@ async function setup(page: Page, { appIcons = false } = {}) {
       | 'bluetooth'
       | 'airplane'
       | 'brightness'
+      | 'display_brightness'
       | 'auto_brightness'
       | 'volume',
       number | string | null
@@ -56,6 +57,7 @@ async function setup(page: Page, { appIcons = false } = {}) {
     controlStateError: string
     controlStateResponse?: Promise<void>
     brightnessResponse?: Promise<void>
+    deferDisplayBrightness?: boolean
     homeResponse?: Promise<void>
   } = {
     deviceInfo: info,
@@ -66,6 +68,7 @@ async function setup(page: Page, { appIcons = false } = {}) {
       bluetooth: 0,
       airplane: 0,
       brightness: 128,
+      display_brightness: null,
       auto_brightness: 0,
       volume: '5,0,15',
     },
@@ -130,6 +133,11 @@ async function setup(page: Page, { appIcons = false } = {}) {
       if (body.operation === 'brightness') {
         await mock.brightnessResponse
         mock.controlState.brightness = Number(body.value)
+        mock.controlState.auto_brightness = 0
+      }
+      if (body.operation === 'display-brightness' && !mock.deferDisplayBrightness) {
+        const [, min, max] = String(mock.controlState.display_brightness).split(',')
+        mock.controlState.display_brightness = `${Number(body.value) / 1_000_000},${min},${max}`
         mock.controlState.auto_brightness = 0
       }
       if (body.operation === 'auto-brightness') mock.controlState.auto_brightness = 1
@@ -311,7 +319,7 @@ for (const theme of ['light', 'dark'] as const) {
     const { panel } = await openControlCenter(page)
     const brightness = panel.getByRole('group', { name: '屏幕亮度', exact: true })
     const thumb = brightness.getByRole('slider')
-    await expect(thumb).toHaveAttribute('aria-valuenow', '128')
+    await expect(thumb).toHaveAttribute('aria-valuenow', '50')
     const volume = panel.getByRole('group', { name: '媒体音量', exact: true })
     await expect(volume.getByText(/^5\s*\/\s*15$/)).toBeVisible()
     const meter = volume.locator('.control-center-volume-meter')
@@ -372,7 +380,7 @@ test('the horizontal brightness slider commits a drag only on release', async ({
 
   await expect(brightness).toHaveAttribute('aria-orientation', 'horizontal')
   await expect(brightness).toBeEnabled()
-  await expect(brightness).toHaveAttribute('aria-valuenow', '128')
+  await expect(brightness).toHaveAttribute('aria-valuenow', '50')
   await expect(panel.getByRole('button', { name: '应用', exact: true })).toHaveCount(0)
   await expect(panel.getByRole('spinbutton')).toHaveCount(0)
 
@@ -385,7 +393,7 @@ test('the horizontal brightness slider commits a drag only on release', async ({
   await page.mouse.down()
   let target: string | null = null
   try {
-    await expect(brightness).not.toHaveAttribute('aria-valuenow', '128')
+    await expect(brightness).not.toHaveAttribute('aria-valuenow', '50')
     const first = await brightness.getAttribute('aria-valuenow')
     await page.mouse.move(x + width * 0.35, y + height / 2, { steps: 3 })
     await expect(brightness).not.toHaveAttribute('aria-valuenow', first!)
@@ -394,7 +402,9 @@ test('the horizontal brightness slider commits a drag only on release', async ({
   } finally {
     await page.mouse.up()
   }
-  await expect.poll(actions).toEqual([{ operation: 'brightness', value: target }])
+  await expect
+    .poll(actions)
+    .toEqual([{ operation: 'brightness', value: String(Math.round((Number(target) / 100) * 255)) }])
   await expect(panel.getByRole('status')).toHaveText('已执行：设置亮度')
 })
 
@@ -406,27 +416,27 @@ test('brightness commits only the latest keyboard draft behind a pending write',
   const brightness = panel.getByRole('slider', { name: '屏幕亮度', exact: true })
   const actions = () => calls.filter((call) => call.operation === 'brightness')
   await expect(brightness).toBeEnabled()
-  await expect(brightness).toHaveAttribute('aria-valuenow', '128')
+  await expect(brightness).toHaveAttribute('aria-valuenow', '50')
 
   const response = Promise.withResolvers<void>()
   mock.brightnessResponse = response.promise
   try {
     await brightness.press('ArrowRight')
-    await expect.poll(actions).toEqual([{ operation: 'brightness', value: '129' }])
+    await expect.poll(actions).toEqual([{ operation: 'brightness', value: '130' }])
     await brightness.press('ArrowRight')
     await brightness.press('ArrowRight')
-    await expect(brightness).toHaveAttribute('aria-valuenow', '131')
+    await expect(brightness).toHaveAttribute('aria-valuenow', '53')
     expect(actions()).toHaveLength(1)
   } finally {
     mock.brightnessResponse = undefined
     response.resolve()
   }
   await expect.poll(actions).toEqual([
-    { operation: 'brightness', value: '129' },
-    { operation: 'brightness', value: '131' },
+    { operation: 'brightness', value: '130' },
+    { operation: 'brightness', value: '135' },
   ])
   await expect(panel.getByRole('status')).toHaveText('已执行：设置亮度')
-  await expect(brightness).toHaveAttribute('aria-valuenow', '131')
+  await expect(brightness).toHaveAttribute('aria-valuenow', '53')
 })
 
 test('volume keys show the reported media level, even when a key does not change it', async ({
@@ -505,7 +515,15 @@ test('a failed media volume readback shows a toast and clears the unconfirmed le
 
 test('the auto-brightness icon exposes and confirms the device mode', async ({ page }) => {
   const { calls, mock } = await setup(page)
+  mock.controlState.brightness = 135
+  mock.controlState.display_brightness = '0.52755904,0.035433073,1.0'
   const { panel } = await openControlCenter(page)
+  const brightness = panel.getByRole('slider', { name: '屏幕亮度', exact: true })
+  await expect(brightness).toHaveAttribute('aria-valuenow', '88')
+  await expect(panel.getByText('88%', { exact: true })).toBeVisible()
+  mock.controlState.display_brightness = '0.11581365,0.035433073,1.0'
+  await panel.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await expect(brightness).toHaveAttribute('aria-valuetext', '50%')
   const autoBrightness = panel.getByRole('button', { name: '自动亮度', exact: true })
   await expect(autoBrightness).toHaveAttribute('aria-pressed', 'false')
 
@@ -518,13 +536,54 @@ test('the auto-brightness icon exposes and confirms the device mode', async ({ p
       .toEqual([{ operation: 'auto-brightness', value: '' }])
     await expect
       .poll(() => calls.filter(({ operation }) => operation === 'control-state'))
-      .toHaveLength(2)
+      .toHaveLength(3)
     await expect(autoBrightness).toHaveAttribute('aria-pressed', 'false')
+    mock.controlState.display_brightness = '0.035433073,0.035433073,1.0'
   } finally {
     mock.controlStateResponse = undefined
     response.resolve()
   }
   await expect(autoBrightness).toHaveAttribute('aria-pressed', 'true')
+  await expect(brightness).toHaveAttribute('aria-valuenow', '0')
+  await brightness.press('End')
+  await expect
+    .poll(() => calls.filter(({ operation }) => operation === 'display-brightness'))
+    .toEqual([{ operation: 'display-brightness', value: '1000000' }])
+  await expect(panel.getByRole('status')).toHaveText('已执行：设置亮度')
+  await expect(brightness).toHaveAttribute('aria-valuenow', '100')
+  await expect(autoBrightness).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('a brightness write waits for the updated display readback', async ({ page }) => {
+  const { calls, mock } = await setup(page)
+  mock.controlState.display_brightness = '0.11581365,0.035433073,1.0'
+  mock.deferDisplayBrightness = true
+  const { panel } = await openControlCenter(page)
+  const brightness = panel.getByRole('slider', { name: '屏幕亮度', exact: true })
+  await expect(brightness).toHaveAttribute('aria-valuetext', '50%')
+  const reads = () => calls.filter(({ operation }) => operation === 'control-state')
+  const firstRead = Promise.withResolvers<void>()
+  const retryRead = Promise.withResolvers<void>()
+  mock.controlStateResponse = firstRead.promise
+  try {
+    await brightness.press('ArrowRight')
+    await expect
+      .poll(() => calls.filter(({ operation }) => operation === 'display-brightness'))
+      .toEqual([{ operation: 'display-brightness', value: '119120' }])
+    await expect.poll(reads).toHaveLength(2)
+    // Let the first read report the old level, then supply the updated one to the retry.
+    mock.controlStateResponse = retryRead.promise
+    firstRead.resolve()
+    await expect.poll(reads).toHaveLength(3)
+    mock.controlState.display_brightness = '0.119120,0.035433073,1.0'
+  } finally {
+    mock.controlStateResponse = undefined
+    firstRead.resolve()
+    retryRead.resolve()
+  }
+  await expect(panel.getByRole('status')).toHaveText('已执行：设置亮度')
+  await expect(brightness).toHaveAttribute('aria-valuetext', '51%')
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0)
 })
 
 test('radio switches reflect control-state and wait for confirmed readback', async ({ page }) => {

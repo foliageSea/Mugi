@@ -7,6 +7,9 @@ import {
   installAPKSet,
   parseDeviceInfo,
   parseControlState,
+  brightnessPercent,
+  linearBrightness,
+  displayBrightnessScale,
   parseSnapshot,
   calculateMetrics,
   LogcatParser,
@@ -25,6 +28,8 @@ const stream = (bytes) =>
 test('device operations validate arguments and report Android failures', async () => {
   assert.throws(() => operationCommand('app-clear', 'com.example;reboot'))
   assert.throws(() => operationCommand('brightness', '256'))
+  assert.throws(() => operationCommand('display-brightness', '1000001'))
+  assert.throws(() => operationCommand('display-brightness', '0.5'))
   assert.equal(operationCommand('home'), 'input keyevent 3')
   await assert.rejects(
     operate({ shell: async () => 'Failure [restricted]' }, 'app-clear', 'com.example.app'),
@@ -76,6 +81,7 @@ test('control-state parser preserves real ranges and represents unknowns indepen
       bluetooth: true,
       airplane: false,
       brightness: 81,
+      displayBrightness: null,
       autoBrightness: true,
       volume: { level: 53, min: 0, max: 150 },
     },
@@ -86,6 +92,7 @@ test('control-state parser preserves real ranges and represents unknowns indepen
     bluetooth: null,
     airplane: null,
     brightness: null,
+    displayBrightness: null,
     autoBrightness: null,
     volume: null,
   }
@@ -101,6 +108,23 @@ test('control-state parser preserves real ranges and represents unknowns indepen
   assert.deepEqual(parseControlState('volume=0,0,0').volume, { level: 0, min: 0, max: 0 })
   for (const raw of ['5,6,15', '5,0,4', '5,15,0', '-1,0,15', '5,0,9007199254740993']) {
     assert.equal(parseControlState('volume=' + raw).volume, null)
+  }
+})
+
+test('display brightness uses the Android slider scale and round-trips with display limits', () => {
+  const state = parseControlState('brightness=135\ndisplay_brightness=0.52755904,0.035433073,1.0')
+  assert.deepEqual(state.displayBrightness, { level: 0.52755904, min: 0.035433073, max: 1 })
+  const { level, min, max } = state.displayBrightness
+  assert.equal(brightnessPercent(level, min, max), 88)
+  assert.ok(Math.abs(linearBrightness(50, min, max) - 0.11581365) < 1e-7)
+  assert.equal(linearBrightness(0, min, max), min)
+  assert.equal(linearBrightness(100, min, max), max)
+  for (let percent = 0; percent <= 100; percent++) {
+    const wire = Math.round(linearBrightness(percent, min, max) * displayBrightnessScale)
+    assert.equal(brightnessPercent(wire / displayBrightnessScale, min, max), percent)
+  }
+  for (const raw of ['', 'NaN,0,1', '0.2,0.5,0.4', '0.2,,1', '0.2,0,2', '0.2,0,1,5']) {
+    assert.equal(parseControlState('display_brightness=' + raw).displayBrightness, null)
   }
 })
 

@@ -27,6 +27,7 @@ import {
   AccordionTrigger,
 } from 'reka-ui'
 import { toast } from 'vue-sonner'
+import { brightnessPercent, displayBrightnessScale, linearBrightness } from '@mugi/web-adb'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -62,6 +63,7 @@ type DeviceCommand = {
   operation: Exclude<Operation, 'device-info' | 'control-state'>
   label: string
   value?: string
+  brightnessTarget?: number
 }
 type Command = DeviceCommand | { screen: ScreenAction; label: string }
 type Connection = {
@@ -124,7 +126,23 @@ const busyOperation = ref<Operation | ScreenAction>()
 const announcement = ref('')
 const reading = ref(false)
 const state = ref<DeviceControlState | null>(null)
-const brightnessDraft = ref(128)
+const brightnessDraft = ref(50)
+function sliderBrightness(data: DeviceControlState | null) {
+  const display = data?.displayBrightness
+  if (display) return brightnessPercent(display.level, display.min, display.max)
+  const legacy = data?.brightness
+  return legacy == null ? null : Math.round((legacy / 255) * 100)
+}
+const currentBrightness = computed(() => sliderBrightness(state.value))
+const brightnessValueText = computed(() => {
+  if (reading.value) return '读取中…'
+  if (currentBrightness.value === null && !brightnessWrite(busyOperation.value)) return '亮度未知'
+  const percent = brightnessDraft.value + '%'
+  return state.value?.displayBrightness ? percent : '原始刻度 ' + percent
+})
+function brightnessWrite(operation: Operation | ScreenAction | undefined) {
+  return operation === 'display-brightness' || operation === 'brightness'
+}
 const volumeFeedback = ref('')
 const volumeText = computed(() => {
   if (reading.value) return '读取中…'
@@ -146,7 +164,7 @@ let brightnessRevision = 0
 let queuedBrightness: number | undefined
 const brightnessDisabled = computed(
   () =>
-    reading.value || (!!busy.value && busyOperation.value !== 'brightness') || confirmOpen.value,
+    reading.value || (!!busy.value && !brightnessWrite(busyOperation.value)) || confirmOpen.value,
 )
 const wifiText = computed(() => {
   if (reading.value) return '读取中…'
@@ -186,6 +204,7 @@ function emptyState(): DeviceControlState {
     bluetooth: null,
     airplane: null,
     brightness: null,
+    displayBrightness: null,
     autoBrightness: null,
     volume: null,
   }
@@ -210,7 +229,7 @@ async function readControls() {
     )
     if (!validRead()) return
     state.value = data
-    brightnessDraft.value = data.brightness ?? 128
+    brightnessDraft.value = sliderBrightness(data) ?? 50
   } catch (cause) {
     if (validRead()) {
       state.value = null
@@ -242,7 +261,7 @@ watch(
     readController = undefined
     reading.value = false
     state.value = null
-    brightnessDraft.value = 128
+    brightnessDraft.value = 50
     volumeFeedback.value = ''
     queuedBrightness = undefined
     pending = undefined
@@ -361,28 +380,39 @@ function run(command: Command) {
               volumeFeedback.value = '已到音量边界'
             else volumeFeedback.value = '媒体音量未变化'
           }
-        } else if (operation === 'brightness' || operation === 'auto-brightness') {
-          const manual = operation === 'brightness'
-          if (manual && queuedBrightness !== undefined) return
-          const data = await sample(
-            target,
-            AbortSignal.any([controller.signal, AbortSignal.timeout(3500)]),
-          )
-          if (!visibleWrite()) return
-          patchState({ brightness: data.brightness, autoBrightness: data.autoBrightness })
-          if (manual && data.brightness !== null && revision === brightnessRevision)
-            brightnessDraft.value = data.brightness
-          if (manual && (data.brightness === null || data.autoBrightness === true))
+        } else if (brightnessWrite(operation) || operation === 'auto-brightness') {
+          const manual = brightnessWrite(operation)
+          const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(3500)])
+          let data: DeviceControlState | undefined
+          let percent: number | null = null
+          // The display service and SettingsProvider can publish updates after the write returns.
+          for (const delay of [120, 240, 450]) {
+            await new Promise((resolve) => setTimeout(resolve, delay))
+            if (!visibleWrite() || (manual && queuedBrightness !== undefined)) return
+            data = await sample(target, signal)
+            percent = sliderBrightness(data)
+            if (
+              manual
+                ? data.autoBrightness === false && percent === command.brightnessTarget
+                : data.autoBrightness === true
+            )
+              break
+          }
+          if (!visibleWrite() || (manual && queuedBrightness !== undefined)) return
+          if (!data) throw new Error('设备没有返回亮度状态')
+          if (manual && (percent === null || data.autoBrightness !== false))
             throw new Error('设备没有返回可确认的手动亮度')
-          if (
-            manual &&
-            queuedBrightness === undefined &&
-            data.brightness !== Number(command.value)
-          ) {
-            toast.error('设备未达到目标亮度，已显示实际亮度。')
+          if (!manual && data.autoBrightness !== true) throw new Error('设备没有确认自动亮度已开启')
+          patchState({
+            brightness: data.brightness,
+            displayBrightness: data.displayBrightness,
+            autoBrightness: data.autoBrightness,
+          })
+          if (revision === brightnessRevision) brightnessDraft.value = percent ?? 50
+          if (manual && percent !== command.brightnessTarget) {
+            toast.error('设备未达到目标亮度，已显示设备回读的亮度。')
             return
           }
-          if (!manual && data.autoBrightness !== true) throw new Error('设备没有确认自动亮度已开启')
         }
       }
       if (visibleWrite())
@@ -397,10 +427,10 @@ function run(command: Command) {
         toast.error(sent ? '未能回读媒体音量' : command.label + '失败：' + errorText(cause))
         return
       }
-      if (sent && (operation === 'brightness' || operation === 'auto-brightness'))
-        patchState({ brightness: null, autoBrightness: null })
-      if (operation === 'brightness' && !sent && revision === brightnessRevision)
-        brightnessDraft.value = state.value?.brightness ?? 128
+      if (sent && (brightnessWrite(operation) || operation === 'auto-brightness'))
+        patchState({ brightness: null, displayBrightness: null, autoBrightness: null })
+      if (brightnessWrite(operation) && revision === brightnessRevision)
+        brightnessDraft.value = currentBrightness.value ?? 50
       toast.error(
         command.label + (sent ? '请求已发送，未能确认状态：' : '失败：') + errorText(cause),
       )
@@ -433,7 +463,16 @@ function drainBrightness() {
   if (!canWrite() || queuedBrightness === undefined) return
   const value = queuedBrightness
   queuedBrightness = undefined
-  run({ operation: 'brightness', value: String(value), label: '设置亮度' })
+  const display = state.value?.displayBrightness
+  const level = display
+    ? Math.round(linearBrightness(value, display.min, display.max) * displayBrightnessScale)
+    : Math.round((value / 100) * 255)
+  run({
+    operation: display ? 'display-brightness' : 'brightness',
+    value: String(level),
+    label: '设置亮度',
+    brightnessTarget: value,
+  })
 }
 
 function confirmCommand(event: MouseEvent, command: DeviceCommand, description: string) {
@@ -602,15 +641,7 @@ async function focusTitle(event: Event) {
             <div class="control-center-level" role="group" aria-label="屏幕亮度">
               <div class="control-center-level-heading">
                 <span class="control-center-level-label">亮度</span>
-                <span class="control-center-level-value">
-                  {{
-                    reading
-                      ? '读取中…'
-                      : state?.brightness == null && busyOperation !== 'brightness'
-                        ? '亮度未知'
-                        : brightnessDraft + ' / 255'
-                  }}
-                </span>
+                <span class="control-center-level-value">{{ brightnessValueText }}</span>
               </div>
               <div class="control-center-level-track">
                 <Sun class="control-center-level-icon" aria-hidden="true" />
@@ -618,16 +649,12 @@ async function focusTitle(event: Event) {
                   :model-value="[brightnessDraft]"
                   orientation="horizontal"
                   :min="0"
-                  :max="255"
+                  :max="100"
                   :step="1"
                   :disabled="brightnessDisabled"
                   class="control-center-slider"
                   aria-label="屏幕亮度"
-                  :aria-valuetext="
-                    !reading && state?.brightness == null && busyOperation !== 'brightness'
-                      ? '亮度未知'
-                      : undefined
-                  "
+                  :aria-valuetext="brightnessValueText"
                   @update:model-value="updateBrightness"
                   @value-commit="commitBrightness"
                 />

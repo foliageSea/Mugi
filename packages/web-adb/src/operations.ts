@@ -111,12 +111,19 @@ export function parseBatteryState(raw: string): BatteryState {
     charging: fields.status === '2',
   }
 }
+export interface DisplayBrightness {
+  level: number
+  min: number
+  max: number
+}
+
 export interface DeviceControlState {
   wifi: boolean | null
   wifiConnected: boolean | null
   bluetooth: boolean | null
   airplane: boolean | null
   brightness: number | null
+  displayBrightness: DisplayBrightness | null
   autoBrightness: boolean | null
   volume: { level: number; min: number; max: number } | null
 }
@@ -139,6 +146,20 @@ export function parseControlState(raw: string): DeviceControlState {
     return Number.isSafeInteger(n) ? n : null
   }
   const brightness = uint(fields.get('brightness'))
+  const display = fields.get('display_brightness')?.split(',') ?? []
+  const [displayLevel, displayMin, displayMax] = display.map(numberOrNull)
+  const displayBrightness =
+    display.length === 3 &&
+    displayLevel != null &&
+    displayLevel >= 0 &&
+    displayLevel <= 1 &&
+    displayMin != null &&
+    displayMin >= 0 &&
+    displayMax != null &&
+    displayMax > displayMin &&
+    displayMax <= 1
+      ? { level: displayLevel, min: displayMin, max: displayMax }
+      : null
   const parts = fields.get('volume')?.match(/^(\d+)\s*,\s*(\d+)\s*,\s*(\d+)$/)
   const level = uint(parts?.[1]),
     min = uint(parts?.[2]),
@@ -149,6 +170,7 @@ export function parseControlState(raw: string): DeviceControlState {
     bluetooth: bool('bluetooth'),
     airplane: bool('airplane'),
     brightness: brightness !== null && brightness <= 255 ? brightness : null,
+    displayBrightness,
     autoBrightness: bool('auto_brightness'),
     volume:
       level !== null && min !== null && max !== null && min <= level && level <= max
