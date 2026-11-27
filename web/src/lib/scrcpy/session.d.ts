@@ -18,6 +18,7 @@ export class Session {
   closed: boolean
   displayPowerOff: boolean
   frameSize: { width: number; height: number }
+  getVideoCounters(): { frames: number; bytes: number }
   start(): void
   send(message: Uint8Array): boolean
   setDisplayPower(on: boolean): boolean

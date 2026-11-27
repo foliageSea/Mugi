@@ -38,6 +38,7 @@ async function usbPage(page: Page, photoVersion?: number) {
       disconnected: false,
       failSocket: false,
       holdSocket: false,
+      pushVideo: undefined as ((data: Uint8Array) => void) | undefined,
       pending: [] as (() => void)[],
       disconnect: () => {},
     }
@@ -230,6 +231,7 @@ async function usbPage(page: Page, photoVersion?: number) {
               view.setUint32(73, 1080)
               view.setUint32(77, 2400)
               c.enqueue(bytes)
+              state.pushVideo = (data) => c.enqueue(data)
             } else if (index === 1 && audioEnabled[address]) c.enqueue(encoder.encode('opus'))
           },
         })
@@ -1023,7 +1025,7 @@ test('USB mirror and app scrcpy commands use the selected cast settings', async 
     .poll(() =>
       page.evaluate(() => JSON.parse(localStorage.getItem('mugi.cast-settings') ?? 'null')),
     )
-    .toEqual({ maxSize: 1080, maxFps: 30, bitRateMbps: 4 })
+    .toEqual({ maxSize: 1080, maxFps: 30, bitRateMbps: 4, showStats: false })
   await settings.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(settings).toBeHidden()
 
@@ -1052,6 +1054,124 @@ test('USB mirror and app scrcpy commands use the selected cast settings', async 
     ]),
   )
   expect(app.some((arg) => arg.startsWith('max_size='))).toBe(false)
+  expect(requests).toEqual([])
+})
+
+function castStatsSettings(page: Page) {
+  const dialog = page.getByRole('dialog', { name: '设置', exact: true })
+  const cast = dialog.getByRole('region', { name: '投屏参数', exact: true })
+  return {
+    open: page.getByRole('button', { name: '设置', exact: true }),
+    close: dialog.getByRole('button', { name: '关闭', exact: true }),
+    toggle: cast.getByRole('switch', { name: '显示投屏性能指标', exact: true }),
+    reset: cast.getByRole('button', { name: '恢复默认', exact: true }),
+  }
+}
+
+test('WebUSB casting statistics default off, persist across reload, and reset off', async ({
+  page,
+}) => {
+  await usbPage(page)
+  const settings = castStatsSettings(page)
+  const savedShowStats = () =>
+    page.evaluate(() => JSON.parse(localStorage.getItem('mugi.cast-settings') ?? 'null')?.showStats)
+
+  await settings.open.click()
+  await expect(settings.toggle).not.toBeChecked()
+  await settings.toggle.click()
+  await expect(settings.toggle).toBeChecked()
+  await expect.poll(savedShowStats).toBe(true)
+
+  await page.reload()
+  await settings.open.click()
+  await expect(settings.toggle).toBeChecked()
+  await settings.reset.click()
+  await expect(settings.toggle).not.toBeChecked()
+  await expect.poll(savedShowStats).toBe(false)
+})
+
+test('WebUSB casting statistics use decoded sizes and live samples without restarting the cast', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    // Keep the real scrcpy stream parser and renderer; substitute the codec only.
+    window.VideoDecoder = class {
+      state = 'unconfigured'
+      decodeQueueSize = 0
+      constructor(private hooks: VideoDecoderInit) {}
+      configure() {
+        this.state = 'configured'
+      }
+      decode(chunk: EncodedVideoChunk) {
+        const canvas = document.createElement('canvas')
+        const portrait = chunk.timestamp < 66_666
+        canvas.width = portrait ? 720 : 1600
+        canvas.height = portrait ? 1600 : 720
+        const frame = new VideoFrame(canvas, { timestamp: chunk.timestamp })
+        queueMicrotask(() => this.hooks.output(frame))
+      }
+      close() {
+        this.state = 'closed'
+      }
+    } as unknown as typeof VideoDecoder
+  })
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') })
+  const requests = await usbPage(page)
+  const settings = castStatsSettings(page)
+  const mirror = page.locator('.mirror-window')
+  const stats = mirror.getByTestId('cast-stats')
+  const sendFrames = (timestamps: number[]) =>
+    page.evaluate((timestamps) => {
+      for (const timestamp of timestamps) {
+        const payloadBytes = 250_000
+        const packet = new Uint8Array(12 + payloadBytes)
+        const header = new DataView(packet.buffer)
+        header.setBigUint64(0, (1n << 61n) | BigInt(timestamp)) // keyframe PTS
+        header.setUint32(8, payloadBytes)
+        ;(window as any).__usb.pushVideo(packet)
+      }
+    }, timestamps)
+
+  await page.getByRole('button', { name: '镜像屏幕', exact: true }).click()
+  await expect(mirror).toHaveAttribute('data-session-id', /\S+/)
+  const sessionId = (await mirror.getAttribute('data-session-id'))!
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).__usb.pushVideo))
+    .toBe('function')
+
+  await settings.open.click()
+  await settings.toggle.click()
+  await settings.close.click()
+  await expect(mirror.locator('.screen-message')).toBeVisible()
+  await expect(stats).toHaveCount(0)
+
+  // Pin the sampling clock until after the initial placeholders are observed.
+  const now = await page.evaluate(() => Date.now())
+  await page.clock.pauseAt(now + 500)
+  await sendFrames([0])
+  await expect(stats).toBeVisible()
+  await expect(stats).toHaveClass(/\bmirror-stats\b/)
+  // The USB header advertises 1080×2400, not the frame's decoded size.
+  await expect(stats).toHaveText(/^— FPS\s*·\s*720×1600\s*·\s*— Mbps$/)
+  await sendFrames([33_333, 66_666])
+  await expect(stats).toContainText('1600×720')
+  await page.clock.runFor(1_000)
+  // The first frame establishes a baseline. The next two deliver 500,000 bytes.
+  await expect(stats).toHaveText(/^2(?:\.0+)? FPS\s*·\s*1600×720\s*·\s*4(?:\.0+)? Mbps$/)
+  await page.clock.runFor(1_000)
+  await expect(stats).toHaveText(/^0(?:\.0+)? FPS\s*·\s*1600×720\s*·\s*0(?:\.0+)? Mbps$/)
+  await page.clock.resume()
+
+  await settings.open.click()
+  await settings.toggle.click()
+  await settings.close.click()
+  await expect(stats).toHaveCount(0)
+  await settings.open.click()
+  await settings.toggle.click()
+  await settings.close.click()
+  await expect(stats).toBeVisible()
+  await expect(stats).toContainText('1600×720')
+  await expect(mirror).toHaveAttribute('data-session-id', sessionId)
   expect(requests).toEqual([])
 })
 

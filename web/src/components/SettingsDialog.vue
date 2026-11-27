@@ -98,7 +98,7 @@ const lightMode = computed({
           <div class="settings-row">
             <div class="grid gap-0.5">
               <h2 id="settings-cast-title" class="text-sm font-medium">投屏参数</h2>
-              <p class="text-muted-foreground text-xs">仅对新建投屏生效</p>
+              <p class="text-muted-foreground text-xs">画质参数仅对新建投屏生效</p>
             </div>
             <Button type="button" variant="ghost" size="sm" @click="resetCastSettings">
               恢复默认
@@ -116,6 +116,10 @@ const lightMode = computed({
                 </SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div class="settings-row">
+            <FieldLabel for="settings-cast-stats">显示投屏性能指标</FieldLabel>
+            <Switch id="settings-cast-stats" v-model="castSettings.showStats" />
           </div>
         </section>
 

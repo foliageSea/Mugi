@@ -60,6 +60,10 @@ export class WebUsbSession {
     })
   }
 
+  getVideoCounters() {
+    return this.player.getVideoCounters()
+  }
+
   start() {
     void this.connect().catch((error) => this.fail(error))
   }

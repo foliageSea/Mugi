@@ -44,6 +44,10 @@ export class Session {
     this.audio = null
   }
 
+  getVideoCounters() {
+    return this.player.getVideoCounters()
+  }
+
   start() {
     this.detachInput = attachInput(
       this.canvas,

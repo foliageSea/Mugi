@@ -19,6 +19,8 @@ export class VideoPlayer {
     this.hooks = hooks
     this.frameWidth = 0
     this.frameHeight = 0
+    this.renderedFrames = 0
+    this.receivedVideoBytes = 0
     this.decoder = null
     this.codec = null
     this.width = 0
@@ -80,6 +82,8 @@ export class VideoPlayer {
 
   handlePacket(pts, config, key, payload) {
     if (this.closed || !this.codec) return
+    // Count encoded video payload, not transport headers or decoded pixels.
+    this.receivedVideoBytes += payload.byteLength
     if (config) {
       this.codecConfig = payload.slice()
       return
@@ -123,6 +127,7 @@ export class VideoPlayer {
         this.canvas.height = displayHeight
       }
       this.ctx.drawImage(frame, 0, 0, displayWidth, displayHeight)
+      this.renderedFrames++
       if (displayWidth !== this.frameWidth || displayHeight !== this.frameHeight) {
         this.frameWidth = displayWidth
         this.frameHeight = displayHeight
@@ -135,6 +140,10 @@ export class VideoPlayer {
     } finally {
       frame.close()
     }
+  }
+
+  getVideoCounters() {
+    return { frames: this.renderedFrames, bytes: this.receivedVideoBytes }
   }
 
   reset() {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, nextTick } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, nextTick, watch } from 'vue'
 import {
   ChevronLeft,
   Circle,
@@ -39,6 +39,7 @@ import {
   type CastSessionHooks,
 } from '@/services/castSessions'
 import { useScreenOff } from '@/composables/useScreenOff'
+import { useCastSettings } from '@/composables/useCastSettings'
 import { errorText } from '@/services/api'
 import { uploadFiles } from '@/services/files'
 import { downloadBlob } from '@/services/workbench'
@@ -62,6 +63,7 @@ function syncFullscreenTarget() {
 const info = props.window.info
 const id = props.window.id
 const { screenOff } = useScreenOff()
+const { castSettings } = useCastSettings()
 let currentInfo = info
 const clipboardToastId = `clipboard-${info.id}`
 const appPackage = info.opts.mode === 'display' ? info.opts.startApp : ''
@@ -88,6 +90,30 @@ let session: CastSession | undefined,
   generation = 0,
   stoppedId = ''
 let stopping: Promise<void> | undefined
+const resolution = ref('')
+const videoRates = ref<{ fps: number; mbps: number }>()
+const showVideoStats = computed(
+  () => castSettings.value.showStats && ready.value && !reconnecting.value && !closing.value,
+)
+watch(showVideoStats, (show, _, onCleanup) => {
+  videoRates.value = undefined
+  const current = session
+  if (!show || !current) return
+  let previous = current.getVideoCounters()
+  let sampledAt = performance.now()
+  const timer = window.setInterval(() => {
+    const next = current.getVideoCounters()
+    const now = performance.now()
+    const elapsed = (now - sampledAt) / 1000
+    videoRates.value = {
+      fps: (next.frames - previous.frames) / elapsed,
+      mbps: ((next.bytes - previous.bytes) * 8) / elapsed / 1_000_000,
+    }
+    previous = next
+    sampledAt = now
+  }, 1000)
+  onCleanup(() => window.clearInterval(timer))
+})
 function send(message: Uint8Array) {
   return session?.send(message) || false
 }
@@ -279,7 +305,10 @@ function connectSession() {
     onResize: active((width, height) => {
       if (!ready.value) updateRatio(width, height)
     }),
-    onFrameSize: active(updateRatio),
+    onFrameSize: active((width, height) => {
+      updateRatio(width, height)
+      resolution.value = `${width}×${height}`
+    }),
     onClipboard: active(async (text) => {
       try {
         await navigator.clipboard.writeText(text)
@@ -357,6 +386,11 @@ onBeforeUnmount(() => {
         :aria-label="`${title} 的触控画面`"
         @pointerdown="focusCanvas"
       />
+      <div v-if="showVideoStats" class="mirror-stats" data-testid="cast-stats">
+        <span>{{ videoRates?.fps.toFixed(0) ?? '—' }} FPS</span>
+        <span>· {{ resolution }}</span>
+        <span>· {{ videoRates?.mbps.toFixed(2) ?? '—' }} Mbps</span>
+      </div>
       <div v-if="!ready || reconnecting" class="screen-message">
         <LoaderCircle class="size-6 animate-spin" />
         <span>

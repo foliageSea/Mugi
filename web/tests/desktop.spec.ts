@@ -671,6 +671,7 @@ test('mirror canvas follows the decoded frame aspect ratio instead of portrait m
 }) => {
   const frameSize = { width: 800, height: 450 }
   await page.addInitScript(({ width, height }) => {
+    localStorage.setItem('mugi.cast-settings', JSON.stringify({ showStats: true }))
     window.VideoDecoder = class {
       state = 'unconfigured'
       constructor(private hooks: VideoDecoderInit) {}
@@ -699,6 +700,8 @@ test('mirror canvas follows the decoded frame aspect ratio instead of portrait m
   await expect(canvas).toHaveJSProperty('width', frameSize.width)
   await expect(canvas).toHaveJSProperty('height', frameSize.height)
 
+  const stats = mirror.getByTestId('cast-stats')
+  await expect(stats).toContainText('800×450')
   const expectDecodedRatio = async () => {
     await expect
       .poll(async () => {
@@ -706,6 +709,13 @@ test('mirror canvas follows the decoded frame aspect ratio instead of portrait m
         return bounds ? bounds.width / bounds.height : 0
       })
       .toBeCloseTo(frameSize.width / frameSize.height, 2)
+    await expect
+      .poll(async () => {
+        const [picture, overlay] = await Promise.all([canvas.boundingBox(), stats.boundingBox()])
+        if (!picture || !overlay) return Infinity
+        return Math.max(Math.abs(overlay.x - picture.x - 6), Math.abs(overlay.y - picture.y - 6))
+      })
+      .toBeLessThan(2)
   }
 
   for (const width of [1200, 760]) {

@@ -80,6 +80,22 @@ test('async decoder errors rebuild a closed decoder and retain codec config', (t
   assert.equal(errors.length, 0)
 })
 
+test('video counters track received payloads separately from drawn frames', (t) => {
+  const { player, decoders, key, delta } = setup(t)
+  const frame = { displayWidth: 720, displayHeight: 1280, close() {} }
+  assert.deepEqual(player.getVideoCounters(), { frames: 0, bytes: 0 })
+  player.handlePacket(0n, true, false, Uint8Array.of(0, 0, 1, 0x67))
+  delta() // Dropped while waiting for the keyframe, but still received.
+  key()
+  assert.deepEqual(player.getVideoCounters(), { frames: 0, bytes: 6 })
+  decoders[0].hooks.output(frame)
+  player.configure('h264')
+  decoders[0].hooks.output(frame) // Output from the retired decoder is ignored.
+  key()
+  decoders[1].hooks.output(frame)
+  assert.deepEqual(player.getVideoCounters(), { frames: 2, bytes: 7 })
+})
+
 test('reset explicitly recreates an already closed decoder', (t) => {
   const { player, decoders, key } = setup(t)
   decoders[0].close()

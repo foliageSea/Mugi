@@ -137,6 +137,7 @@ test('settings keep labels left and controls right at desktop and 320px without 
         { group: cast, label: '镜像最大长边', role: 'combobox' },
         { group: cast, label: '最高帧率', role: 'combobox' },
         { group: cast, label: '视频码率', role: 'combobox' },
+        { group: cast, label: '显示投屏性能指标', role: 'switch' },
       ] as const
       const labelEdges: number[] = []
       const controlEdges: number[] = []

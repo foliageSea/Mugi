@@ -7,7 +7,7 @@ import { getActiveWebUsbConnection, requireWebUsbConnection } from './webusb'
 export type CastSessionHooks = SessionHooks & WebUsbSessionHooks
 export type CastSession = Pick<
   Session,
-  'start' | 'detach' | 'send' | 'setDisplayPower' | 'wakeScreen' | 'lockScreen'
+  'start' | 'detach' | 'send' | 'setDisplayPower' | 'wakeScreen' | 'lockScreen' | 'getVideoCounters'
 > & { close(reason?: string): void | Promise<void> }
 
 export function isDeviceLockedError(error: unknown) {
