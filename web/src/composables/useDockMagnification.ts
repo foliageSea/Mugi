@@ -55,15 +55,55 @@ export function useDockMagnification(
     }
 
     function move(event: PointerEvent) {
-      if (event.pointerType === 'touch' || !motion.matches || !hover.matches) return
+      if (
+        event.pointerType === 'touch' ||
+        !motion.matches ||
+        !hover.matches ||
+        root!.hasAttribute('data-scrollable')
+      )
+        return
       pointer = vertical.value ? event.clientY : event.clientX
       root!.setAttribute('data-magnifying', 'true')
       schedule()
     }
 
+    function scrollBottomDock(event: WheelEvent) {
+      if (
+        vertical.value ||
+        !root!.hasAttribute('data-scrollable') ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.deltaX ||
+        !event.deltaY
+      )
+        return
+      const before = track!.scrollLeft
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? track!.clientWidth : 1
+      track!.scrollLeft += event.deltaY * unit
+      if (track!.scrollLeft !== before) event.preventDefault()
+    }
+
     function updateOverflow() {
-      const scrollable = vertical.value && track!.scrollHeight > track!.clientHeight
+      const last = track!.querySelector<HTMLElement>('.dock-item:last-child')
+      if (!last) return
+      const style = getComputedStyle(track!)
+      // Layout offsets exclude hover transforms, which can extend beyond a fitted track.
+      const scrollable = vertical.value
+        ? last.offsetTop + last.offsetHeight + parseFloat(style.paddingBottom) >
+          track!.clientHeight + 1
+        : last.offsetLeft + last.offsetWidth + parseFloat(style.paddingRight) >
+          track!.clientWidth + 1
       root!.toggleAttribute('data-scrollable', scrollable)
+    }
+
+    function updateFit() {
+      const icons = track!.querySelectorAll(':scope > .dock-item').length
+      const separators = track!.querySelectorAll(':scope > [data-slot="separator"]').length
+      track!.style.setProperty('--dock-icon-count', String(Math.max(1, icons)))
+      track!.style.setProperty('--dock-gap-count', String(Math.max(0, icons + separators - 1)))
+      track!.style.setProperty('--dock-separator-count', String(separators))
+      updateOverflow()
+      reset()
     }
 
     const stopWatching = watch(
@@ -80,15 +120,14 @@ export function useDockMagnification(
       reset()
     })
     resize.observe(track)
-    const children = new MutationObserver(() => {
-      updateOverflow()
-      schedule()
-    })
+    const children = new MutationObserver(updateFit)
     children.observe(track, { childList: true })
+    updateFit()
     root.addEventListener('pointermove', move)
     root.addEventListener('pointerleave', reset)
     root.addEventListener('pointercancel', reset)
     track.addEventListener('scroll', schedule, { passive: true })
+    track.addEventListener('wheel', scrollBottomDock, { passive: false })
     window.addEventListener('blur', reset)
     motion.addEventListener('change', reset)
     hover.addEventListener('change', reset)
@@ -100,6 +139,7 @@ export function useDockMagnification(
       root.removeEventListener('pointerleave', reset)
       root.removeEventListener('pointercancel', reset)
       track.removeEventListener('scroll', schedule)
+      track.removeEventListener('wheel', scrollBottomDock)
       window.removeEventListener('blur', reset)
       motion.removeEventListener('change', reset)
       hover.removeEventListener('change', reset)

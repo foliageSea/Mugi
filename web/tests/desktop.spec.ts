@@ -1238,6 +1238,85 @@ for (const position of ['left', 'right'] as const) {
   })
 }
 
+for (const { position, roomy, narrow } of [
+  { position: 'left', roomy: { width: 1200, height: 850 }, narrow: { width: 1200, height: 500 } },
+  { position: 'bottom', roomy: { width: 1200, height: 800 }, narrow: { width: 390, height: 800 } },
+]) {
+  test(
+    `${position} Dock shrinks to fit casting windows before falling back to scrolling`,
+    async ({ page }) => {
+      await page.setViewportSize(roomy)
+      await page.emulateMedia({ reducedMotion: 'reduce' })
+      await page.addInitScript((edge) => {
+        localStorage.setItem('mugi.dock-position', edge)
+        // Keep the windows open without allocating real decoders for static test streams.
+        window.VideoDecoder = class {
+          configure() {}
+          close() {}
+        } as unknown as typeof VideoDecoder
+      }, position)
+      await backend(page)
+
+      const dock = page.getByRole('navigation', { name: '工作区操作' })
+      const buttons = dock.getByRole('button')
+      const running = dock.getByRole('button', { name: /^切换到 .* 窗口$/ })
+      const track = dock.locator('.dock-track')
+      const vertical = position === 'left'
+      const iconSizes = () =>
+        buttons.evaluateAll((items) => [
+          ...new Set(
+            items.flatMap((item) => {
+              const { width, height } = item.getBoundingClientRect()
+              return [width, height]
+            }),
+          ),
+        ])
+      const overflowing = () =>
+        track.evaluate(
+          (item, alongY) =>
+            alongY ? item.scrollHeight > item.clientHeight : item.scrollWidth > item.clientWidth,
+          vertical,
+        )
+
+      await expect(dock).toHaveAttribute('data-position', position)
+      await expect.poll(iconSizes).toEqual([48])
+      await expect(dock).not.toHaveAttribute('data-scrollable')
+
+      await dock.getByRole('button', { name: '镜像屏幕', exact: true }).click()
+      await expect(running).toHaveCount(1)
+      const launcher = page.getByRole('button', { name: '打开应用启动器', exact: true })
+      for (const [index, app] of apps.entries()) {
+        await launcher.click()
+        await page.getByRole('button', { name: `打开 ${app.name}`, exact: true }).click()
+        await expect(running).toHaveCount(index + 2)
+      }
+
+      await expect.poll(async () => Math.max(...(await iconSizes()))).toBeLessThan(48)
+      const crowdedSizes = await iconSizes()
+      expect(crowdedSizes).toHaveLength(1) // Every button is the same square size.
+      expect(crowdedSizes[0]).toBeGreaterThan(24)
+      await expect(dock).not.toHaveAttribute('data-scrollable')
+      await expect.poll(overflowing).toBe(false)
+      for (const button of await buttons.all()) await expect(button).toBeInViewport({ ratio: 1 })
+
+      await page.setViewportSize(narrow)
+      await expect.poll(iconSizes).toEqual([24])
+      await expect(dock).toHaveAttribute('data-scrollable', '')
+      await expect.poll(overflowing).toBe(true)
+      await expect(track).toHaveCSS('scrollbar-width', 'none')
+      const last = running.last()
+      await expect(last).not.toBeInViewport({ ratio: 1 })
+      await buttons.first().hover()
+      await page.mouse.wheel(0, 1000)
+      await expect(last).toBeInViewport({ ratio: 1 })
+
+      await page.setViewportSize(roomy)
+      await expect.poll(iconSizes).toEqual(crowdedSizes)
+      await expect(dock).not.toHaveAttribute('data-scrollable')
+    },
+  )
+}
+
 test('Dock shows a tooltip on hover and keyboard focus', async ({ page }) => {
   await backend(page)
   const dock = page.getByRole('navigation', { name: '工作区操作' })
@@ -1313,8 +1392,12 @@ test('Android placeholder stays inside its Dock artwork', async ({ page }) => {
   const artwork = dockButton.locator('.app-art .generic-art')
   const icon = artwork.locator('.android-app-placeholder')
   await expect(artwork).toBeVisible()
-  await expect(icon).toHaveCSS('width', '22px')
-  await expect(icon).toHaveCSS('height', '22px')
+  const [artBox, iconBox] = await Promise.all([artwork.boundingBox(), icon.boundingBox()])
+  expect(iconBox!.width).toBeCloseTo(iconBox!.height, 1)
+  expect(iconBox!.width).toBeGreaterThan(0)
+  expect(iconBox!.width).toBeLessThan(Math.min(artBox!.width, artBox!.height))
+  expect(iconBox!.x + iconBox!.width / 2).toBeCloseTo(artBox!.x + artBox!.width / 2, 1)
+  expect(iconBox!.y + iconBox!.height / 2).toBeCloseTo(artBox!.y + artBox!.height / 2, 1)
 })
 
 test('desktop removes promotional chrome and caches wallpaper preferences', async ({ page }) => {

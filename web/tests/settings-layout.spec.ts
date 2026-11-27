@@ -66,12 +66,17 @@ test('Dock defaults to the left and remembers its selected edge', async ({ page 
   await expect(position).toHaveText('底部')
 })
 
-test('vertical Dock scrolls to the last icon in a short viewport', async ({ page }) => {
+test('very short Dock scrolls without a visible scrollbar at minimum icon size', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 320, height: 360 })
   await page.goto('/?transport=webusb')
   const dock = page.getByRole('navigation', { name: '工作区操作' })
   const track = dock.locator('.dock-track')
   const last = dock.getByRole('button', { name: 'Logcat', exact: true })
+  await expect(dock).toHaveAttribute('data-scrollable', '')
+  await expect(track).toHaveCSS('scrollbar-width', 'none')
+  await expect(last).toHaveCSS('width', '24px')
   await last.scrollIntoViewIfNeeded()
   await expect(last).toBeInViewport({ ratio: 1 })
   expect(await track.evaluate((track) => track.scrollTop)).toBeGreaterThan(0)
